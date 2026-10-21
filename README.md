@@ -1,0 +1,25 @@
+# Halo — iOS-style launcher for Galaxy Z Fold 5
+
+Big widgets, no app drawer, App Library on the last page.
+
+- **Cover screen** → iPhone layout (4 × 6 grid, 4-app dock)
+- **Inner screen** → iPad layout (6 × 6 grid, 6-app dock + 3 recent apps)
+- Each screen keeps its own layout; folding/unfolding switches instantly.
+
+## Features
+- Home pages with iOS-sized widgets: Clock (analog / digital), Calendar (S/M/L), Batteries
+- Real Android widgets from any app (Weather, Google, Gmail…) in Small / Medium / Large
+- Swipe down (or tap the Search pill) → Spotlight search: apps, web, Play Store
+- Last page = App Library: auto-sorted folders (Suggestions, Recently Added, Social, Entertainment…)
+- Long-press an icon → menu (Edit Home Screen, App Info, Remove, Delete App)
+- Edit mode: icons jiggle, drag to rearrange, “−” to remove, “+” to add widgets, Wallpaper button
+- Home button while on Home → closes overlays / leaves edit mode / jumps to page 1
+
+## Build
+Every push to `main` builds a signed APK with GitHub Actions and posts it under **Releases**.
+Keep this repo **private** — it contains the signing key (`app/halo-release.jks`), which lets new builds install over old ones.
+
+## Install on the Fold
+1. Open the repo's **Releases** page on the phone and download the newest `Halo-N.apk`.
+2. Open it and allow “Install unknown apps” for your browser when asked.
+3. Settings → Apps → Choose default apps → Home app → **Halo** (or tap “Set” on the banner Halo shows).
