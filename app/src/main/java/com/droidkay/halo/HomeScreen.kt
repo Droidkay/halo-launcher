@@ -10,6 +10,8 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateIntOffsetAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -76,6 +78,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.draw.blur
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.CompositionLocalProvider
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -196,10 +202,18 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
         }
     }
 
+    // iOS-style glass: when a folder, search or menu is open, blur the wallpaper and the icons behind it.
+    val blurOn = folder != null || spotlight || librarySearch || menu != null
+    val blurSupported = rememberWallpaperBlurSupported()
+    WallpaperBlurEffect(active = blurOn && blurSupported)
+    val contentBlur by animateDpAsState(if (blurOn) 24.dp else 0.dp, tween(260), label = "contentBlur")
+
+    CompositionLocalProvider(LocalWallpaperBlur provides blurSupported) {
     Box(Modifier.fillMaxSize()) {
         Column(
             Modifier
                 .fillMaxSize()
+                .then(if (contentBlur > 0.dp) Modifier.blur(contentBlur) else Modifier)
                 .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
@@ -282,8 +296,16 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                 },
             )
         }
-        folder?.let { name ->
-            FolderOverlay(state, mode, name, launch, onDismiss = { folder = null }, onMenu = { menu = it })
+        var shownFolder by remember { mutableStateOf<String?>(null) }
+        if (folder != null) shownFolder = folder
+        AnimatedVisibility(
+            visible = folder != null,
+            enter = fadeIn(tween(220)) + scaleIn(tween(260), initialScale = 0.86f),
+            exit = fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.86f),
+        ) {
+            shownFolder?.let { name ->
+                FolderOverlay(state, mode, name, launch, onDismiss = { folder = null }, onMenu = { menu = it })
+            }
         }
         AnimatedVisibility(
             visible = gallery,
@@ -312,6 +334,7 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
         menu?.let { req ->
             ContextMenu(req, entriesFor(req), onDismiss = { menu = null })
         }
+    }
     }
 }
 

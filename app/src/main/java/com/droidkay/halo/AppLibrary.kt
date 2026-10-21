@@ -181,7 +181,7 @@ fun FolderOverlay(
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.55f))
+            .background(glassScrim(0.15f, 0.6f))
             .pointerInput(Unit) { detectTapGestures { onDismiss() } },
         contentAlignment = Alignment.Center,
     ) {
@@ -200,8 +200,8 @@ fun FolderOverlay(
                 columns = GridCells.Fixed(cols),
                 modifier = Modifier
                     .heightIn(max = 560.dp)
-                    .clip(RoundedCornerShape(30.dp))
-                    .background(Color.White.copy(alpha = 0.18f))
+                    .clip(RoundedCornerShape(36.dp))
+                    .background(Color.White.copy(alpha = if (LocalWallpaperBlur.current) 0.22f else 0.14f))
                     .pointerInput(Unit) { detectTapGestures { } },
                 contentPadding = PaddingValues(18.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),

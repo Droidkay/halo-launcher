@@ -181,7 +181,7 @@ fun SearchOverlay(
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.8f))
+            .background(glassScrim(0.35f, 0.8f))
             .pointerInput(Unit) { detectTapGestures { onDismiss() } }
     ) {
         Column(
@@ -276,7 +276,7 @@ fun ContextMenu(req: MenuRequest, entries: List<MenuEntry>, onDismiss: () -> Uni
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.35f))
+            .background(glassScrim(0.12f, 0.4f))
             .pointerInput(Unit) { detectTapGestures { onDismiss() } }
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
