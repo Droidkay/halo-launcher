@@ -79,6 +79,10 @@ import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.CompositionLocalProvider
@@ -205,15 +209,27 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
     // iOS-style glass: when a folder, search or menu is open, blur the wallpaper and the icons behind it.
     val blurOn = folder != null || spotlight || librarySearch || menu != null
     val blurSupported = rememberWallpaperBlurSupported()
-    WallpaperBlurEffect(active = blurOn && blurSupported)
-    val contentBlur by animateDpAsState(if (blurOn) 24.dp else 0.dp, tween(260), label = "contentBlur")
+    val overlayBlur by animateFloatAsState(if (blurOn) 1f else 0f, tween(260), label = "overlayBlur")
+    // Fold transition: the screen you land on resolves from blurred + zoomed to sharp, like an iPhone waking.
+    val reveal = remember { Animatable(1f) }
+    LaunchedEffect(Unit) { reveal.animateTo(0f, tween(750, easing = FastOutSlowInEasing)) }
+    // ...and the screen you're leaving melts into blur as the hinge moves.
+    val hinge = rememberHingeBlur(mode)
+    val foldBlur = maxOf(reveal.value, hinge)
+    if (blurSupported) WindowBlur((maxOf(overlayBlur, foldBlur) * 90f).toInt())
+    val contentBlur = maxOf(overlayBlur * 24f, foldBlur * 36f).dp
 
     CompositionLocalProvider(LocalWallpaperBlur provides blurSupported) {
     Box(Modifier.fillMaxSize()) {
         Column(
             Modifier
                 .fillMaxSize()
-                .then(if (contentBlur > 0.dp) Modifier.blur(contentBlur) else Modifier)
+                .graphicsLayer {
+                    scaleX = 1f + 0.08f * foldBlur
+                    scaleY = 1f + 0.08f * foldBlur
+                    alpha = 1f - 0.35f * foldBlur
+                }
+                .then(if (contentBlur > 0.5.dp) Modifier.blur(contentBlur) else Modifier)
                 .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
