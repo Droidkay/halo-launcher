@@ -80,6 +80,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
@@ -211,13 +212,15 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
     val blurOn = folder != null || spotlight || librarySearch || menu != null
     val blurSupported = rememberWallpaperBlurSupported()
     val overlayBlur by animateFloatAsState(if (blurOn) 1f else 0f, tween(260), label = "overlayBlur")
-    // Fold transition: spring-driven, synced to the hinge (see FoldTransition.kt).
-    val fold = rememberFoldMotion(mode)
-    // Opening: the cover screen grows toward the big screen, and the inner screen expands into place.
-    // Closing: the inner screen compresses inward, and the cover screen settles down into place.
-    val scaleDir = if (mode == LayoutMode.COVER) 0.06f else -0.07f
+    // Fold transition (Apple "Duo" style):
+    //  - cover screen: the whole screen frosts as the hinge starts to open (and clears as it closes)
+    //  - inner screen: only the half that's still swinging is frosted, sharpening as it lands flat
+    val fold = rememberFoldAmount(mode)
+    val halfBlur = remember { HalfPanelBlur() }
+    val landscape = LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
     WallpaperBlurDriver(blurSupported) {
-        maxOf(overlayBlur, smooth(fold.depth.value)) * 110f
+        val f = if (mode == LayoutMode.COVER) fold.value else 0f
+        maxOf(overlayBlur, f) * 100f
     }
 
     CompositionLocalProvider(LocalWallpaperBlur provides blurSupported) {
@@ -227,15 +230,22 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                 .fillMaxSize()
                 .graphicsLayer {
                     // Read on the GPU layer only: no recomposition per frame.
-                    val p = fold.progress.value
-                    val e = smooth(p)
-                    val s = 1f + scaleDir * p
-                    scaleX = s
-                    scaleY = s
-                    alpha = 1f - 0.3f * e
-                    translationY = -6.dp.toPx() * e
-                    val r = maxOf(overlayBlur * 24.dp.toPx(), e * 34.dp.toPx())
-                    renderEffect = if (r > 0.5f) BlurEffect(r, r, TileMode.Decal) else null
+                    val f = fold.value
+                    val overlayPx = overlayBlur * 24.dp.toPx()
+                    if (mode == LayoutMode.COVER) {
+                        val r = maxOf(overlayPx, f * 30.dp.toPx())
+                        alpha = 1f - 0.22f * f
+                        scaleX = 1f + 0.03f * f
+                        scaleY = 1f + 0.03f * f
+                        renderEffect = if (r > 0.5f) BlurEffect(r, r, TileMode.Decal) else null
+                    } else {
+                        val half = halfBlur.effect(f, f * 36.dp.toPx(), size.width, size.height, landscape)
+                        renderEffect = when {
+                            overlayPx > 0.5f -> BlurEffect(overlayPx, overlayPx, TileMode.Decal)
+                            half != null -> half.asComposeRenderEffect()
+                            else -> null
+                        }
+                    }
                 }
                 .statusBarsPadding()
                 .navigationBarsPadding()
@@ -287,16 +297,7 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                 enter = fadeIn() + slideInVertically { it },
                 exit = fadeOut() + slideOutVertically { it },
             ) {
-                Column(
-                    Modifier.graphicsLayer {
-                        // Parallax: the dock trails the grid, drifting a little further and scaling less.
-                        val e = smooth(fold.progress.value)
-                        translationY = 18.dp.toPx() * e
-                        val s = 1f - scaleDir * 0.4f * fold.progress.value
-                        scaleX = s
-                        scaleY = s
-                    }
-                ) {
+                Column {
                     SearchOrDots(
                         scrolling = pager.isScrollInProgress,
                         count = pageCount,
@@ -307,14 +308,6 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                 }
             }
         }
-
-        // Soft dimming that travels with the background blur.
-        Box(
-            Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = 0.28f * smooth(fold.depth.value) }
-                .background(Color.Black)
-        )
 
         AnimatedVisibility(visible = spotlight, enter = fadeIn(), exit = fadeOut()) {
             SearchOverlay(
