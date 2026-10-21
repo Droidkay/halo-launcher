@@ -21,6 +21,8 @@ val LocalWallpaperBlur = compositionLocalOf { false }
 fun glassScrim(blurred: Float = 0.18f, fallback: Float = 0.6f): Color =
     Color.Black.copy(alpha = if (LocalWallpaperBlur.current) blurred else fallback)
 
+tailrec fun Context.findActivityOrNull(): Activity? = findActivity()
+
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
