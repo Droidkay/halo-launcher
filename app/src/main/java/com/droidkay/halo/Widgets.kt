@@ -85,7 +85,9 @@ private data class WidgetColors(val card: Color, val text: Color, val secondary:
 
 @Composable
 private fun widgetColors(): WidgetColors =
-    if (isSystemInDarkTheme()) WidgetColors(Color(0xFF1C1C1E), Color.White, IosGray, Color(0xFF2C2C2E))
+    // Halo Pad: always dark glass widgets, iPadOS 26 style.
+    if (BuildConfig.IS_PAD) WidgetColors(Color.Transparent, Color.White, Color(0xFF9A9AA0), Color.White.copy(alpha = 0.07f))
+    else if (isSystemInDarkTheme()) WidgetColors(Color(0xFF1C1C1E), Color.White, IosGray, Color(0xFF2C2C2E))
     else WidgetColors(Color.White, Color.Black, IosGray, Color(0xFFF2F2F7))
 
 @Composable
@@ -93,9 +95,11 @@ private fun WidgetCard(content: @Composable () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(22.dp))
-            .background(widgetColors().card)
-            .padding(14.dp)
+            .then(
+                if (BuildConfig.IS_PAD) Modifier.liquidGlass(RoundedCornerShape(26.dp), dark = true)
+                else Modifier.clip(RoundedCornerShape(22.dp)).background(widgetColors().card)
+            )
+            .padding(if (BuildConfig.IS_PAD) 16.dp else 14.dp)
     ) { content() }
 }
 
@@ -179,8 +183,10 @@ private fun ClockWidget(size: WidgetSize) {
         Box(
             Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(22.dp))
-                .background(colors.card)
+                .then(
+                    if (BuildConfig.IS_PAD) Modifier.liquidGlass(RoundedCornerShape(26.dp), dark = true)
+                    else Modifier.clip(RoundedCornerShape(22.dp)).background(colors.card)
+                )
                 .padding(10.dp),
             contentAlignment = Alignment.Center,
         ) {

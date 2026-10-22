@@ -10,7 +10,8 @@ enum class LayoutMode { COVER, INNER }
 data class GridSpec(val cols: Int, val rows: Int, val dockSize: Int)
 
 fun LayoutMode.spec(): GridSpec =
-    if (this == LayoutMode.INNER) GridSpec(cols = 6, rows = 6, dockSize = if (BuildConfig.IS_PAD) 8 else 6)
+    if (BuildConfig.IS_PAD) GridSpec(cols = 8, rows = 5, dockSize = 8)
+    else if (this == LayoutMode.INNER) GridSpec(cols = 6, rows = 6, dockSize = 6)
     else GridSpec(cols = 4, rows = 6, dockSize = 4)
 
 enum class WidgetSize(val w: Int, val h: Int, val title: String) {
@@ -151,6 +152,12 @@ class LayoutStore(context: Context) {
 
     fun saveRecents(list: List<String>) {
         prefs.edit().putString("recents", list.joinToString("\n")).apply()
+    }
+
+    fun layoutVersion(): Int = prefs.getInt("layout_version", 1)
+
+    fun setLayoutVersion(v: Int) {
+        prefs.edit().putInt("layout_version", v).apply()
     }
 
     fun bannerDismissed(): Boolean = prefs.getBoolean("banner_dismissed", false)

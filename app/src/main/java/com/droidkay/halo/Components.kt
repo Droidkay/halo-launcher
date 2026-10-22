@@ -192,8 +192,10 @@ fun MagnifierIcon(color: Color = Color.White, size: Dp = 14.dp) {
 fun GlassPill(text: String, bold: Boolean = false, onClick: () -> Unit) {
     Box(
         Modifier
-            .clip(RoundedCornerShape(50))
-            .background(Color.White.copy(alpha = 0.28f))
+            .then(
+                if (BuildConfig.IS_PAD) Modifier.liquidGlass(RoundedCornerShape(50))
+                else Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.28f))
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 7.dp)
     ) {

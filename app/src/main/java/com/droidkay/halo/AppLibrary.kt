@@ -54,8 +54,10 @@ fun AppLibraryPage(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 10.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.White.copy(alpha = 0.2f))
+                .then(
+                    if (BuildConfig.IS_PAD) Modifier.liquidGlass(RoundedCornerShape(50))
+                    else Modifier.clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.2f))
+                )
                 .clickable(onClick = onSearch)
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.Center,
@@ -93,8 +95,10 @@ private fun CategoryTile(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(24.dp))
-                .background(Color.White.copy(alpha = 0.16f))
+                .then(
+                    if (BuildConfig.IS_PAD) Modifier.liquidGlass(RoundedCornerShape(28.dp))
+                    else Modifier.clip(RoundedCornerShape(24.dp)).background(Color.White.copy(alpha = 0.16f))
+                )
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {

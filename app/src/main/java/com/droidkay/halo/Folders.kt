@@ -77,8 +77,10 @@ fun FolderCell(
                 Modifier
                     .size(iconSize)
                     .onGloballyPositioned { bounds = it.boundsInRoot() }
-                    .clip(SquircleShape)
-                    .background(Color.White.copy(alpha = 0.30f))
+                    .then(
+                        if (BuildConfig.IS_PAD) Modifier.liquidGlass(SquircleShape, rim = 1.dp)
+                        else Modifier.clip(SquircleShape).background(Color.White.copy(alpha = 0.30f))
+                    )
                     .pointerInput(edit) {
                         detectTapGestures(
                             onTap = { open() },
@@ -194,8 +196,11 @@ fun FolderPanel(
                 columns = GridCells.Fixed(cols),
                 modifier = Modifier
                     .heightIn(max = 600.dp)
-                    .clip(RoundedCornerShape(40.dp))
-                    .background(Color.White.copy(alpha = if (LocalWallpaperBlur.current) 0.22f else 0.14f))
+                    .then(
+                        if (BuildConfig.IS_PAD) Modifier.liquidGlass(RoundedCornerShape(40.dp))
+                        else Modifier.clip(RoundedCornerShape(40.dp))
+                            .background(Color.White.copy(alpha = if (LocalWallpaperBlur.current) 0.22f else 0.14f))
+                    )
                     .pointerInput(Unit) { detectTapGestures { focus.clearFocus() } },
                 contentPadding = PaddingValues(22.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),

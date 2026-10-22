@@ -69,7 +69,10 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
     }
 
     init {
-        LayoutMode.values().forEach { m -> store.load(m)?.let { layouts[m] = it } }
+        // Halo Pad v2 layout (no category-folder page, iPadOS grid): start fresh once.
+        val resetPad = BuildConfig.IS_PAD && store.layoutVersion() < PAD_LAYOUT_VERSION
+        if (!resetPad) LayoutMode.values().forEach { m -> store.load(m)?.let { layouts[m] = it } }
+        if (resetPad) store.setLayoutVersion(PAD_LAYOUT_VERSION)
         launcherApps.registerCallback(callback, Handler(Looper.getMainLooper()))
         loadApps()
     }
@@ -350,7 +353,7 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
     private fun createDefault(mode: LayoutMode): ScreenLayout =
         if (BuildConfig.IS_PAD) createPadDefault() else createPhoneDefault(mode)
 
-    /** iPadOS-style start: a widget page, then a page of category folders. */
+    /** iPadOS 26-style start: a row of dark glass widgets on top, apps underneath. */
     private fun createPadDefault(): ScreenLayout {
         val spec = LayoutMode.INNER.spec()
         val byPkg = apps.groupBy { it.pkg }
@@ -360,18 +363,21 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
         val favorites = FAVORITES.mapNotNull { keyFor(it) }.distinct().filter { it !in dock }.toMutableList()
         val first = mutableListOf<HomeItem>(
             HomeItem.BuiltIn(1L, WidgetKind.CLOCK, WidgetSize.MEDIUM),
-            HomeItem.BuiltIn(2L, WidgetKind.BATTERY, WidgetSize.SMALL),
-            HomeItem.BuiltIn(3L, WidgetKind.CALENDAR, WidgetSize.LARGE),
+            HomeItem.BuiltIn(2L, WidgetKind.CALENDAR, WidgetSize.SMALL),
+            HomeItem.BuiltIn(3L, WidgetKind.BATTERY, WidgetSize.SMALL),
         )
         while (favorites.isNotEmpty() && fits(first + HomeItem.App(favorites.first()), spec)) {
             first.add(HomeItem.App(favorites.removeAt(0)))
         }
-        val onFirst = first.filterIsInstance<HomeItem.App>().map { it.component }.toSet()
-        val grouped = apps.filter { it.key !in onFirst && it.key !in dock }.groupBy { LibraryCategories.of(it) }
-        val folders = LibraryCategories.order.mapIndexedNotNull { i, cat ->
-            grouped[cat]?.takeIf { it.isNotEmpty() }?.let { HomeItem.Folder(100L + i, cat, it.map { a -> a.key }) }
+        val pages = mutableListOf<List<HomeItem>>(first)
+        if (favorites.isNotEmpty()) {
+            val second = mutableListOf<HomeItem>(HomeItem.BuiltIn(4L, WidgetKind.CALENDAR, WidgetSize.LARGE))
+            while (favorites.isNotEmpty() && fits(second + HomeItem.App(favorites.first()), spec)) {
+                second.add(HomeItem.App(favorites.removeAt(0)))
+            }
+            pages += second
         }
-        return ScreenLayout(listOf(first, folders), dock)
+        return ScreenLayout(pages, dock)
     }
 
     private fun createPhoneDefault(mode: LayoutMode): ScreenLayout {
@@ -429,6 +435,7 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
     }
 
     companion object {
+        private const val PAD_LAYOUT_VERSION = 2
         private val PAD_DOCK = listOf(
             "com.android.chrome", "com.google.android.youtube", "com.whatsapp", "com.google.android.gm",
             "com.miui.gallery", "com.google.android.apps.photos", "com.android.camera", "com.android.settings",

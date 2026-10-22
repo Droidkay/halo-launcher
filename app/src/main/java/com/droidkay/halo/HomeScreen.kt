@@ -280,14 +280,14 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                     onAdd = { gallery = true },
                     onWallpaper = { openWallpaperPicker(context) },
                     onDone = { state.editMode = false },
-                    onAutoFolders = {
+                    onAutoFolders = ({
                         val n = state.addCategoryFolders(mode)
                         Toast.makeText(
                             context,
                             if (n > 0) "Added $n category folders" else "Apps sorted into your folders",
                             Toast.LENGTH_SHORT,
                         ).show()
-                    },
+                    }).takeUnless { BuildConfig.IS_PAD },
                 )
             }
             if (!state.isDefaultHome && !state.bannerDismissed && !state.editMode && !onLibrary) {
@@ -564,7 +564,16 @@ private fun HomePage(
                         mode = mode,
                         item = p.item,
                         iconSize = iconSize,
-                        frameW = cellWdp * p.item.spanW - 12.dp,
+                        frameW = run {
+                            // Keep widgets in iOS proportions on wide tablet cells.
+                            val h = widgetUnit * p.item.spanH - 12.dp
+                            val ratio = when {
+                                p.item.spanW == p.item.spanH && p.item.spanW <= 2 -> 1f
+                                p.item.spanW > p.item.spanH -> 2.15f
+                                else -> 1.05f
+                            }
+                            min(cellWdp * p.item.spanW - 12.dp, h * ratio)
+                        },
                         frameH = widgetUnit * p.item.spanH - 12.dp,
                         launch = launch,
                         onMenu = onMenu,
@@ -738,8 +747,10 @@ private fun Dock(state: LauncherState, mode: LayoutMode, launch: (AppInfo, Rect?
         Row(
             Modifier
                 .then(if (mode == LayoutMode.COVER) Modifier.fillMaxWidth() else Modifier)
-                .clip(RoundedCornerShape(32.dp))
-                .background(Color.White.copy(alpha = 0.22f))
+                .then(
+                    if (BuildConfig.IS_PAD) Modifier.liquidGlass(RoundedCornerShape(34.dp))
+                    else Modifier.clip(RoundedCornerShape(32.dp)).background(Color.White.copy(alpha = 0.22f))
+                )
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             horizontalArrangement = if (mode == LayoutMode.COVER) Arrangement.SpaceEvenly else Arrangement.spacedBy(18.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -793,7 +804,8 @@ private fun SearchOrDots(scrolling: Boolean, count: Int, current: Int, onSearch:
             .height(34.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Crossfade(targetState = scrolling, label = "pill") { isScrolling ->
+        // iPadOS shows page dots only; the phone keeps the iOS Search pill.
+        Crossfade(targetState = scrolling || BuildConfig.IS_PAD, label = "pill") { isScrolling ->
             if (isScrolling) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     for (i in 0 until count) {
@@ -824,7 +836,7 @@ private fun SearchOrDots(scrolling: Boolean, count: Int, current: Int, onSearch:
 }
 
 @Composable
-private fun EditBar(onAdd: () -> Unit, onWallpaper: () -> Unit, onDone: () -> Unit, onAutoFolders: () -> Unit) {
+private fun EditBar(onAdd: () -> Unit, onWallpaper: () -> Unit, onDone: () -> Unit, onAutoFolders: (() -> Unit)?) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -842,8 +854,10 @@ private fun EditBar(onAdd: () -> Unit, onWallpaper: () -> Unit, onDone: () -> Un
             Text("+", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
         }
         Spacer(Modifier.weight(1f))
-        GlassPill("Auto Folders", onClick = onAutoFolders)
-        Spacer(Modifier.width(8.dp))
+        if (onAutoFolders != null) {
+            GlassPill("Auto Folders", onClick = onAutoFolders)
+            Spacer(Modifier.width(8.dp))
+        }
         GlassPill("Wallpaper", onClick = onWallpaper)
         Spacer(Modifier.width(8.dp))
         GlassPill("Done", bold = true, onClick = onDone)
