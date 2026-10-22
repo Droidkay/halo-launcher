@@ -96,6 +96,8 @@ sealed class MenuTarget {
     data class DockApp(val key: String) : MenuTarget()
     data class LibraryApp(val key: String) : MenuTarget()
     data class Widget(val key: String) : MenuTarget()
+    data class HomeFolder(val key: String) : MenuTarget()
+    data class FolderApp(val folderKey: String, val key: String) : MenuTarget()
 }
 
 data class MenuRequest(val target: MenuTarget, val bounds: Rect)
@@ -108,7 +110,8 @@ fun HaloApp(state: LauncherState) {
         val config = LocalConfiguration.current
         val smallest = minOf(config.screenWidthDp, config.screenHeightDp)
         // Fold 5: cover screen ≈ 340–410dp wide, inner screen ≈ 670dp+.
-        val mode = if (smallest >= 500) LayoutMode.INNER else LayoutMode.COVER
+        // Halo Pad always uses the iPadOS layout.
+        val mode = if (BuildConfig.IS_PAD || smallest >= 500) LayoutMode.INNER else LayoutMode.COVER
         key(mode) { HomeRoot(state, mode) }
     }
 }
@@ -127,10 +130,13 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
     var librarySearch by remember { mutableStateOf(false) }
     var gallery by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf<MenuRequest?>(null) }
+    // An open folder: a library category name, or a home folder's key ("f:…").
     var folder by remember { mutableStateOf<String?>(null) }
+    var folderPicker by remember { mutableStateOf<String?>(null) }
 
     fun closeOverlays(): Boolean {
-        val any = spotlight || librarySearch || gallery || menu != null || folder != null
+        val any = spotlight || librarySearch || gallery || menu != null || folder != null || folderPicker != null
+        folderPicker = null
         spotlight = false
         librarySearch = false
         gallery = false
@@ -170,6 +176,7 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                 listOfNotNull(
                     edit,
                     app?.let { MenuEntry("App Info", "ⓘ") { state.openAppInfo(it) } },
+                    MenuEntry("Move to Folder", "▢") { folderPicker = t.key },
                     MenuEntry("Remove from Home Screen", "−") { state.removeFromHome(mode, t.key) },
                     app?.let { MenuEntry("Delete App", "✕", destructive = true) { state.uninstall(it) } },
                 )
@@ -195,6 +202,7 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                     if (state.canAddToDock(mode, t.key)) {
                         add(MenuEntry("Add to Dock", "+") { state.addToDock(mode, t.key) })
                     }
+                    add(MenuEntry("Move to Folder", "▢") { folderPicker = t.key })
                     if (app != null) {
                         add(MenuEntry("App Info", "ⓘ") { state.openAppInfo(app) })
                         add(MenuEntry("Delete App", "✕", destructive = true) { state.uninstall(app) })
@@ -205,17 +213,34 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                 edit,
                 MenuEntry("Remove Widget", "−", destructive = true) { state.removeFromHome(mode, t.key) },
             )
+            is MenuTarget.HomeFolder -> listOf(
+                MenuEntry("Rename", "✎") { folder = t.key },
+                edit,
+                MenuEntry("Remove Folder", "−", destructive = true) { state.removeFromHome(mode, t.key) },
+            )
+            is MenuTarget.FolderApp -> {
+                val app = state.appMap[t.key]
+                listOfNotNull(
+                    MenuEntry("Move to Another Folder", "▢") {
+                        folder = null
+                        folderPicker = t.key
+                    },
+                    MenuEntry("Remove from Folder", "−") { state.removeFromFolder(mode, t.folderKey, t.key) },
+                    app?.let { MenuEntry("App Info", "ⓘ") { state.openAppInfo(it) } },
+                    app?.let { MenuEntry("Delete App", "✕", destructive = true) { state.uninstall(it) } },
+                )
+            }
         }
     }
 
     // iOS-style glass: when a folder, search or menu is open, blur the wallpaper and the icons behind it.
-    val blurOn = folder != null || spotlight || librarySearch || menu != null
+    val blurOn = folder != null || spotlight || librarySearch || menu != null || folderPicker != null
     val blurSupported = rememberWallpaperBlurSupported()
     val overlayBlur by animateFloatAsState(if (blurOn) 1f else 0f, tween(260), label = "overlayBlur")
     // Fold transition (Apple "Duo" style):
     //  - cover screen: the whole screen frosts as the hinge starts to open (and clears as it closes)
     //  - inner screen: only the half that's still swinging is frosted, sharpening as it lands flat
-    val fold = rememberFoldAmount(mode)
+    val fold = rememberFoldAmount(mode, enabled = !BuildConfig.IS_PAD)
     val halfBlur = remember { HalfPanelBlur() }
     val landscape = LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
     WallpaperBlurDriver(blurSupported) {
@@ -255,6 +280,14 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                     onAdd = { gallery = true },
                     onWallpaper = { openWallpaperPicker(context) },
                     onDone = { state.editMode = false },
+                    onAutoFolders = {
+                        val n = state.addCategoryFolders(mode)
+                        Toast.makeText(
+                            context,
+                            if (n > 0) "Added $n category folders" else "Apps sorted into your folders",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    },
                 )
             }
             if (!state.isDefaultHome && !state.bannerDismissed && !state.editMode && !onLibrary) {
@@ -281,7 +314,7 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                 HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), key = { it }) { page ->
                     val pages = state.layout(mode).pages
                     if (page < pages.size) {
-                        HomePage(state, mode, page, pages[page], launch, onMenu = { menu = it })
+                        HomePage(state, mode, page, pages[page], launch, onMenu = { menu = it }, onOpenFolder = { folder = it })
                     } else {
                         AppLibraryPage(
                             state, mode, launch,
@@ -336,9 +369,49 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
             enter = fadeIn(tween(220)) + scaleIn(tween(260), initialScale = 0.86f),
             exit = fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.86f),
         ) {
-            shownFolder?.let { name ->
-                FolderOverlay(state, mode, name, launch, onDismiss = { folder = null }, onMenu = { menu = it })
+            shownFolder?.let { open ->
+                if (open.startsWith("f:")) {
+                    val f = state.folder(mode, open)
+                    FolderPanel(
+                        state, mode,
+                        title = f?.name ?: "Folder",
+                        list = f?.apps?.mapNotNull { state.appMap[it] } ?: emptyList(),
+                        launch = launch,
+                        onDismiss = { folder = null },
+                        appMenu = { app, r -> menu = MenuRequest(MenuTarget.FolderApp(open, app.key), r) },
+                        onRename = { state.renameFolder(mode, open, it) },
+                    )
+                } else {
+                    val list = remember(open, state.apps, state.recents) {
+                        state.libraryGroups().firstOrNull { it.first == open }?.second ?: emptyList()
+                    }
+                    FolderPanel(
+                        state, mode,
+                        title = open,
+                        list = list,
+                        launch = launch,
+                        onDismiss = { folder = null },
+                        appMenu = { app, r -> menu = MenuRequest(MenuTarget.LibraryApp(app.key), r) },
+                        onRename = null,
+                    )
+                }
             }
+        }
+        folderPicker?.let { appKey ->
+            FolderPicker(
+                state, mode, appKey,
+                onDismiss = { folderPicker = null },
+                onPick = { key ->
+                    state.moveToFolder(mode, key, appKey)
+                    folderPicker = null
+                },
+                onNew = { name ->
+                    val target = pager.currentPage.coerceIn(0, pageCount - 1)
+                    val key = state.createFolder(mode, name, appKey, target)
+                    folderPicker = null
+                    folder = key
+                },
+            )
         }
         AnimatedVisibility(
             visible = gallery,
@@ -381,6 +454,7 @@ private fun HomePage(
     items: List<HomeItem>,
     launch: (AppInfo, Rect?) -> Unit,
     onMenu: (MenuRequest) -> Unit,
+    onOpenFolder: (String) -> Unit,
 ) {
     val spec = mode.spec()
     val density = LocalDensity.current
@@ -494,6 +568,7 @@ private fun HomePage(
                         frameH = widgetUnit * p.item.spanH - 12.dp,
                         launch = launch,
                         onMenu = onMenu,
+                        onOpenFolder = onOpenFolder,
                     )
                 }
             }
@@ -511,6 +586,7 @@ private fun HomeItemContent(
     frameH: Dp,
     launch: (AppInfo, Rect?) -> Unit,
     onMenu: (MenuRequest) -> Unit,
+    onOpenFolder: (String) -> Unit,
 ) {
     val edit = state.editMode
     when (item) {
@@ -524,6 +600,17 @@ private fun HomeItemContent(
                 onTap = { r -> launch(app, r) },
                 onLongPress = { r -> onMenu(MenuRequest(MenuTarget.HomeApp(app.key), r)) },
                 onRemove = { state.removeFromHome(mode, app.key) },
+            )
+        }
+        is HomeItem.Folder -> {
+            FolderCell(
+                state = state,
+                folder = item,
+                iconSize = iconSize,
+                edit = edit,
+                onOpen = { onOpenFolder(item.key) },
+                onLongPress = { r -> onMenu(MenuRequest(MenuTarget.HomeFolder(item.key), r)) },
+                onRemove = { state.removeFromHome(mode, item.key) },
             )
         }
         is HomeItem.BuiltIn -> {
@@ -635,7 +722,10 @@ private fun Dock(state: LauncherState, mode: LayoutMode, launch: (AppInfo, Rect?
     val layout = state.layout(mode)
     val dockApps = layout.dock.mapNotNull { state.appMap[it] }
     val recentExtras = if (mode == LayoutMode.INNER) {
-        state.recents.filter { it !in layout.dock }.mapNotNull { state.appMap[it] }.take(3)
+        // Pad in portrait: 8 dock apps already fill the width, so recents only show in landscape.
+        val portrait = LocalConfiguration.current.let { it.screenHeightDp > it.screenWidthDp }
+        state.recents.filter { it !in layout.dock }.mapNotNull { state.appMap[it] }
+            .take(if (BuildConfig.IS_PAD && portrait) 0 else 3)
     } else emptyList()
     val iconSize = if (mode == LayoutMode.INNER) 60.dp else 56.dp
     val edit = state.editMode
@@ -734,7 +824,7 @@ private fun SearchOrDots(scrolling: Boolean, count: Int, current: Int, onSearch:
 }
 
 @Composable
-private fun EditBar(onAdd: () -> Unit, onWallpaper: () -> Unit, onDone: () -> Unit) {
+private fun EditBar(onAdd: () -> Unit, onWallpaper: () -> Unit, onDone: () -> Unit, onAutoFolders: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -752,6 +842,8 @@ private fun EditBar(onAdd: () -> Unit, onWallpaper: () -> Unit, onDone: () -> Un
             Text("+", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
         }
         Spacer(Modifier.weight(1f))
+        GlassPill("Auto Folders", onClick = onAutoFolders)
+        Spacer(Modifier.width(8.dp))
         GlassPill("Wallpaper", onClick = onWallpaper)
         Spacer(Modifier.width(8.dp))
         GlassPill("Done", bold = true, onClick = onDone)

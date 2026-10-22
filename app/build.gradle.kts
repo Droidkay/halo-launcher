@@ -25,6 +25,22 @@ android {
         }
     }
 
+    flavorDimensions += "device"
+    productFlavors {
+        create("fold") {
+            dimension = "device"
+            applicationId = "com.droidkay.halo"
+            resValue("string", "app_name", "Halo")
+            buildConfigField("boolean", "IS_PAD", "false")
+        }
+        create("pad") {
+            dimension = "device"
+            applicationId = "com.droidkay.halopad"
+            resValue("string", "app_name", "Halo Pad")
+            buildConfigField("boolean", "IS_PAD", "true")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -44,6 +60,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"

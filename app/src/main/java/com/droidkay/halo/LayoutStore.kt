@@ -10,7 +10,7 @@ enum class LayoutMode { COVER, INNER }
 data class GridSpec(val cols: Int, val rows: Int, val dockSize: Int)
 
 fun LayoutMode.spec(): GridSpec =
-    if (this == LayoutMode.INNER) GridSpec(cols = 6, rows = 6, dockSize = 6)
+    if (this == LayoutMode.INNER) GridSpec(cols = 6, rows = 6, dockSize = if (BuildConfig.IS_PAD) 8 else 6)
     else GridSpec(cols = 4, rows = 6, dockSize = 4)
 
 enum class WidgetSize(val w: Int, val h: Int, val title: String) {
@@ -37,6 +37,13 @@ sealed class HomeItem {
     /** An app shortcut. [component] is the flattened ComponentName, same as AppInfo.key. */
     data class App(val component: String) : HomeItem() {
         override val key: String get() = component
+        override val spanW: Int get() = 1
+        override val spanH: Int get() = 1
+    }
+
+    /** An iOS-style folder of apps. [apps] are flattened ComponentNames. */
+    data class Folder(val id: Long, val name: String, val apps: List<String>) : HomeItem() {
+        override val key: String get() = "f:$id"
         override val spanW: Int get() = 1
         override val spanH: Int get() = 1
     }
@@ -163,6 +170,9 @@ class LayoutStore(context: Context) {
             is HomeItem.Hosted -> {
                 put("t", "h"); put("id", item.appWidgetId); put("s", item.size.name)
             }
+            is HomeItem.Folder -> {
+                put("t", "f"); put("id", item.id); put("n", item.name); put("a", JSONArray(item.apps))
+            }
         }
     }
 
@@ -171,6 +181,10 @@ class LayoutStore(context: Context) {
             "a" -> HomeItem.App(o.getString("c"))
             "w" -> HomeItem.BuiltIn(o.getLong("id"), WidgetKind.valueOf(o.getString("k")), WidgetSize.valueOf(o.getString("s")))
             "h" -> HomeItem.Hosted(o.getInt("id"), WidgetSize.valueOf(o.getString("s")))
+            "f" -> {
+                val a = o.optJSONArray("a") ?: JSONArray()
+                HomeItem.Folder(o.getLong("id"), o.optString("n", "Folder"), (0 until a.length()).map { a.getString(it) })
+            }
             else -> null
         }
     } catch (e: Exception) {

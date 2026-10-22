@@ -190,7 +190,84 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
         commit(mode, l.copy(pages = l.pages.toMutableList().also { it[index] = items }))
     }
 
-    fun isOnHome(mode: LayoutMode, key: String): Boolean = layout(mode).pages.any { p -> p.any { it.key == key } }
+    fun isOnHome(mode: LayoutMode, key: String): Boolean = layout(mode).pages.any { p ->
+        p.any { it.key == key || (it is HomeItem.Folder && key in it.apps) }
+    }
+
+    // ---------------------------------------------------------------- folders
+
+    fun folders(mode: LayoutMode): List<HomeItem.Folder> =
+        layout(mode).pages.flatten().filterIsInstance<HomeItem.Folder>()
+
+    fun folder(mode: LayoutMode, key: String): HomeItem.Folder? = folders(mode).firstOrNull { it.key == key }
+
+    private fun mapItems(mode: LayoutMode, f: (HomeItem) -> HomeItem?) {
+        val l = layout(mode)
+        commit(mode, l.copy(pages = l.pages.map { p -> p.mapNotNull(f) }))
+    }
+
+    fun renameFolder(mode: LayoutMode, key: String, name: String) {
+        val clean = name.trim().ifEmpty { "Folder" }
+        mapItems(mode) { if (it.key == key && it is HomeItem.Folder) it.copy(name = clean) else it }
+    }
+
+    /** Moves an app into a folder (taking it off the home grid and out of any other folder, like iOS). */
+    fun moveToFolder(mode: LayoutMode, folderKey: String, appKey: String) {
+        mapItems(mode) { item ->
+            when {
+                item is HomeItem.App && item.component == appKey -> null
+                item is HomeItem.Folder && item.key == folderKey ->
+                    if (appKey in item.apps) item else item.copy(apps = item.apps + appKey)
+                item is HomeItem.Folder && appKey in item.apps -> item.copy(apps = item.apps - appKey)
+                else -> item
+            }
+        }
+    }
+
+    /** New folder holding [appKey], placed where the app was (or on the current page). Returns its key. */
+    fun createFolder(mode: LayoutMode, name: String, appKey: String, page: Int): String {
+        val folder = HomeItem.Folder(System.currentTimeMillis(), name, listOf(appKey))
+        val l = layout(mode)
+        val onGrid = l.pages.any { p -> p.any { it is HomeItem.App && it.component == appKey } }
+        if (onGrid) {
+            mapItems(mode) { item ->
+                when {
+                    item is HomeItem.App && item.component == appKey -> folder
+                    item is HomeItem.Folder && appKey in item.apps -> item.copy(apps = item.apps - appKey)
+                    else -> item
+                }
+            }
+        } else {
+            mapItems(mode) { if (it is HomeItem.Folder && appKey in it.apps) it.copy(apps = it.apps - appKey) else it }
+            addToHome(mode, folder, page, prepend = false)
+        }
+        return folder.key
+    }
+
+    fun removeFromFolder(mode: LayoutMode, folderKey: String, appKey: String) {
+        mapItems(mode) { if (it is HomeItem.Folder && it.key == folderKey) it.copy(apps = it.apps - appKey) else it }
+    }
+
+    /** Adds a folder per App Library category (Social, Entertainment…) for apps not already in a folder. */
+    fun addCategoryFolders(mode: LayoutMode): Int {
+        val taken = folders(mode).flatMap { it.apps }.toSet()
+        val existing = folders(mode).associateBy { it.name }
+        val grouped = apps.filter { it.key !in taken }.groupBy { LibraryCategories.of(it) }
+        var added = 0
+        var lastPage = layout(mode).pages.lastIndex
+        LibraryCategories.order.forEachIndexed { i, cat ->
+            val list = grouped[cat]?.map { it.key } ?: return@forEachIndexed
+            if (list.isEmpty()) return@forEachIndexed
+            val current = existing[cat]
+            if (current != null) {
+                mapItems(mode) { if (it.key == current.key && it is HomeItem.Folder) it.copy(apps = it.apps + list) else it }
+            } else {
+                lastPage = addToHome(mode, HomeItem.Folder(System.currentTimeMillis() + i, cat, list), lastPage, prepend = false)
+                added++
+            }
+        }
+        return added
+    }
 
     fun canAddToDock(mode: LayoutMode, key: String): Boolean {
         val l = layout(mode)
@@ -256,14 +333,48 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
         LayoutMode.values().forEach { m ->
             val l = layouts[m] ?: return@forEach
             val cleaned = l.copy(
-                pages = l.pages.map { p -> p.filter { it !is HomeItem.App || it.component in keys } },
+                pages = l.pages.map { p ->
+                    p.filter { it !is HomeItem.App || it.component in keys }.mapNotNull {
+                        if (it is HomeItem.Folder) {
+                            val kept = it.apps.filter { a -> a in keys }
+                            if (kept.isEmpty()) null else if (kept.size == it.apps.size) it else it.copy(apps = kept)
+                        } else it
+                    }
+                },
                 dock = l.dock.filter { it in keys },
             )
             if (cleaned != l) commit(m, cleaned)
         }
     }
 
-    private fun createDefault(mode: LayoutMode): ScreenLayout {
+    private fun createDefault(mode: LayoutMode): ScreenLayout =
+        if (BuildConfig.IS_PAD) createPadDefault() else createPhoneDefault(mode)
+
+    /** iPadOS-style start: a widget page, then a page of category folders. */
+    private fun createPadDefault(): ScreenLayout {
+        val spec = LayoutMode.INNER.spec()
+        val byPkg = apps.groupBy { it.pkg }
+        fun keyFor(pkg: String): String? = byPkg[pkg]?.firstOrNull()?.key
+        val dock = (PAD_DOCK.mapNotNull { keyFor(it) } + FAVORITES.mapNotNull { keyFor(it) })
+            .distinct().take(spec.dockSize).toMutableList()
+        val favorites = FAVORITES.mapNotNull { keyFor(it) }.distinct().filter { it !in dock }.toMutableList()
+        val first = mutableListOf<HomeItem>(
+            HomeItem.BuiltIn(1L, WidgetKind.CLOCK, WidgetSize.MEDIUM),
+            HomeItem.BuiltIn(2L, WidgetKind.BATTERY, WidgetSize.SMALL),
+            HomeItem.BuiltIn(3L, WidgetKind.CALENDAR, WidgetSize.LARGE),
+        )
+        while (favorites.isNotEmpty() && fits(first + HomeItem.App(favorites.first()), spec)) {
+            first.add(HomeItem.App(favorites.removeAt(0)))
+        }
+        val onFirst = first.filterIsInstance<HomeItem.App>().map { it.component }.toSet()
+        val grouped = apps.filter { it.key !in onFirst && it.key !in dock }.groupBy { LibraryCategories.of(it) }
+        val folders = LibraryCategories.order.mapIndexedNotNull { i, cat ->
+            grouped[cat]?.takeIf { it.isNotEmpty() }?.let { HomeItem.Folder(100L + i, cat, it.map { a -> a.key }) }
+        }
+        return ScreenLayout(listOf(first, folders), dock)
+    }
+
+    private fun createPhoneDefault(mode: LayoutMode): ScreenLayout {
         val spec = mode.spec()
         val byPkg = apps.groupBy { it.pkg }
         fun keyFor(pkg: String?): String? = pkg?.let { byPkg[it]?.firstOrNull()?.key }
@@ -318,6 +429,11 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
     }
 
     companion object {
+        private val PAD_DOCK = listOf(
+            "com.android.chrome", "com.google.android.youtube", "com.whatsapp", "com.google.android.gm",
+            "com.miui.gallery", "com.google.android.apps.photos", "com.android.camera", "com.android.settings",
+            "com.miui.notes", "com.google.android.apps.docs",
+        )
         private val FAVORITES = listOf(
             "com.whatsapp", "com.whatsapp.w4b", "com.google.android.youtube", "com.google.android.apps.youtube.creator",
             "com.instagram.android", "com.zhiliaoapp.musically", "com.ss.android.ugc.trill", "com.facebook.katana",

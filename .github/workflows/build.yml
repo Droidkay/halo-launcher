@@ -23,11 +23,13 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Build APK
-        run: gradle assembleRelease --stacktrace
+      - name: Build APKs
+        run: gradle assembleFoldRelease assemblePadRelease --stacktrace
 
-      - name: Name APK
-        run: cp app/build/outputs/apk/release/app-release.apk Halo-${{ github.run_number }}.apk
+      - name: Name APKs
+        run: |
+          cp app/build/outputs/apk/fold/release/app-fold-release.apk Halo-${{ github.run_number }}.apk
+          cp app/build/outputs/apk/pad/release/app-pad-release.apk Halo-Pad-${{ github.run_number }}.apk
 
       - uses: actions/upload-artifact@v4
         with:

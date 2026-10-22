@@ -51,7 +51,8 @@ private fun foldAmount(mode: LayoutMode, angle: Float): Float =
  * at 120 Hz, and it only runs while something is actually changing.
  */
 @Composable
-fun rememberFoldAmount(mode: LayoutMode): State<Float> {
+fun rememberFoldAmount(mode: LayoutMode, enabled: Boolean = true): State<Float> {
+    if (!enabled) return remember { mutableFloatStateOf(0f) }
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val scope = rememberCoroutineScope()
