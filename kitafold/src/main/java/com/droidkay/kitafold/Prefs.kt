@@ -15,6 +15,12 @@ object Prefs {
     fun stretch(c: Context): Int = sp(c).getInt("stretch", 50)
     fun setStretch(c: Context, v: Int) = sp(c).edit().putInt("stretch", v).apply()
 
+    fun frost(c: Context): Boolean = sp(c).getBoolean("frost", true)
+    fun setFrost(c: Context, v: Boolean) = sp(c).edit().putBoolean("frost", v).apply()
+
+    fun frostRight(c: Context): Boolean = sp(c).getBoolean("frostRight", false)
+    fun setFrostRight(c: Context, v: Boolean) = sp(c).edit().putBoolean("frostRight", v).apply()
+
     fun haptic(c: Context): Boolean = sp(c).getBoolean("haptic", true)
     fun setHaptic(c: Context, v: Boolean) = sp(c).edit().putBoolean("haptic", v).apply()
 }

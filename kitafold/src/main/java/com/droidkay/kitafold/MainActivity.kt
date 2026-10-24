@@ -95,6 +95,14 @@ class MainActivity : Activity(), SensorEventListener {
         root.addView(slider("Frost strength", 100, { Prefs.blur(this) }, { Prefs.setBlur(this, it) }, ""))
         root.addView(slider("Stretch", 100, { Prefs.stretch(this) }, { Prefs.setStretch(this, it) }, ""))
         root.addView(CheckBox(this).apply {
+            text = "Frost the swinging half while folding"; isChecked = Prefs.frost(this@MainActivity)
+            setOnCheckedChangeListener { _, v -> Prefs.setFrost(this@MainActivity, v) }
+        })
+        root.addView(CheckBox(this).apply {
+            text = "Swinging half is the right side"; isChecked = Prefs.frostRight(this@MainActivity)
+            setOnCheckedChangeListener { _, v -> Prefs.setFrostRight(this@MainActivity, v) }
+        })
+        root.addView(CheckBox(this).apply {
             text = "Haptic tick"; isChecked = Prefs.haptic(this@MainActivity)
             setOnCheckedChangeListener { _, v -> Prefs.setHaptic(this@MainActivity, v) }
         })

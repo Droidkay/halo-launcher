@@ -18,6 +18,10 @@ import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.view.Display
+import android.view.Gravity
+import android.view.View
+import android.graphics.Color
+import android.graphics.Point
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.widget.ImageView
@@ -53,7 +57,7 @@ class FoldService : AccessibilityService(), SensorEventListener, DisplayManager.
         dm = getSystemService(DisplayManager::class.java)
         val hinge = sm.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE)
         Diag.hasSensor = hinge != null
-        if (hinge != null) sm.registerListener(this, hinge, SensorManager.SENSOR_DELAY_NORMAL)
+        if (hinge != null) sm.registerListener(this, hinge, SensorManager.SENSOR_DELAY_GAME)
         dm.registerDisplayListener(this, main)
         for (d in dm.displays) lastState[d.displayId] = d.state
         Diag.log("Service on. Hinge sensor: ${if (hinge != null) "yes" else "NO"}")
@@ -69,19 +73,110 @@ class FoldService : AccessibilityService(), SensorEventListener, DisplayManager.
         super.onDestroy()
     }
 
-    // ---- hinge: take the picture when a fold/unfold begins
+    // ---- hinge: frost the swinging half while it moves, and take the picture when a fold/unfold begins
     override fun onSensorChanged(e: SensorEvent) {
         val a = e.values[0]
         Diag.angle = a
-        val moved = lastAngle >= 0f && abs(a - lastAngle) > 1.0f
+        val moved = lastAngle >= 0f && abs(a - lastAngle) > 0.6f
         lastAngle = a
         if (!moved) return
         val now = SystemClock.elapsedRealtime()
         if (now - lastMoveAt > 1200L) capture(null)
         lastMoveAt = now
+        if (Prefs.frost(this) && !playing) {
+            val d = activeDisplay()
+            val inner = d != null && isInner(d)
+            val amount = if (inner) smooth((172f - a) / 112f) else smooth((a - 6f) / 50f)
+            setFrost(amount, d, half = inner)
+            main.removeCallbacks(clearFrost)
+            main.postDelayed(clearFrost, 260L)
+        }
     }
 
     override fun onAccuracyChanged(s: Sensor?, accuracy: Int) {}
+
+    private fun smooth(x: Float): Float {
+        val t = x.coerceIn(0f, 1f)
+        return t * t * (3f - 2f * t)
+    }
+
+    private fun realSize(d: Display): Point {
+        val p = Point()
+        @Suppress("DEPRECATION")
+        d.getRealSize(p)
+        return p
+    }
+
+    /** The inner panel is the big, nearly square one. */
+    private fun isInner(d: Display): Boolean {
+        val p = realSize(d)
+        val short = minOf(p.x, p.y).toFloat()
+        val long = maxOf(p.x, p.y).toFloat()
+        return long > 0f && short / long > 0.6f
+    }
+
+    // ---- live frost window (blurs whatever app is behind it)
+    private var frostView: View? = null
+    private var frostWm: WindowManager? = null
+    private var frostLp: WindowManager.LayoutParams? = null
+    private var frostDisplayId = -1
+    private var frostHalf = false
+    private var warnedBlur = false
+    private val clearFrost = Runnable { removeFrost() }
+
+    private fun removeFrost() {
+        val v = frostView ?: return
+        try { frostWm?.removeView(v) } catch (_: Throwable) {}
+        frostView = null
+        frostWm = null
+        frostLp = null
+        frostDisplayId = -1
+    }
+
+    private fun setFrost(amount: Float, d: Display?, half: Boolean) {
+        if (d == null || amount <= 0.01f) { removeFrost(); return }
+        if (frostView == null || frostDisplayId != d.displayId || frostHalf != half) {
+            removeFrost()
+            val ctx = createDisplayContext(d)
+            val wm = ctx.getSystemService(WindowManager::class.java)
+            if (!warnedBlur && !wm.isCrossWindowBlurEnabled) {
+                warnedBlur = true
+                Diag.log("System blur is off (battery saver / reduce transparency): tint only")
+            }
+            val size = realSize(d)
+            val landscape = size.x > size.y
+            val w = if (half && !landscape) size.x / 2 else WindowManager.LayoutParams.MATCH_PARENT
+            val h = if (half && landscape) size.y / 2 else WindowManager.LayoutParams.MATCH_PARENT
+            val lp = WindowManager.LayoutParams(
+                w, h,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                    WindowManager.LayoutParams.FLAG_BLUR_BEHIND,
+                PixelFormat.TRANSLUCENT,
+            )
+            lp.gravity = Gravity.TOP or (if (Prefs.frostRight(this) && !landscape) Gravity.END else Gravity.START)
+            lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            val v = View(ctx)
+            try {
+                wm.addView(v, lp)
+            } catch (t: Throwable) {
+                Diag.log("Frost failed: ${t.javaClass.simpleName}")
+                return
+            }
+            frostView = v; frostWm = wm; frostLp = lp; frostDisplayId = d.displayId; frostHalf = half
+            Diag.log("Frosting ${if (half) "half" else "whole"} screen on display ${d.displayId}")
+        }
+        val v = frostView ?: return
+        val lp = frostLp ?: return
+        val strength = Prefs.blur(this) / 100f
+        val blurOn = frostWm?.isCrossWindowBlurEnabled == true
+        lp.blurBehindRadius = (amount * (20f + 100f * strength)).toInt()
+        v.setBackgroundColor(Color.argb(((if (blurOn) 70 else 150) * amount).toInt(), 10, 12, 20))
+        try { frostWm?.updateViewLayout(v, lp) } catch (_: Throwable) {}
+    }
 
     private fun activeDisplay(): Display? =
         dm.displays.firstOrNull { it.state == Display.STATE_ON } ?: dm.getDisplay(Display.DEFAULT_DISPLAY)
@@ -131,9 +226,7 @@ class FoldService : AccessibilityService(), SensorEventListener, DisplayManager.
         val d = dm.getDisplay(displayId) ?: return
         val before = lastState[displayId]
         lastState[displayId] = d.state
-        val size = android.graphics.Point()
-        @Suppress("DEPRECATION")
-        d.getRealSize(size)
+        val size = realSize(d)
         Diag.log("Display $displayId changed: ${stateName(d.state)} ${size.x}x${size.y}")
         if (d.state != Display.STATE_ON) return
         val s = snap ?: return
@@ -169,6 +262,8 @@ class FoldService : AccessibilityService(), SensorEventListener, DisplayManager.
         val bmp = snap ?: return
         if (playing) return
         playing = true
+        main.removeCallbacks(clearFrost)
+        removeFrost()
         val ctx: Context = createDisplayContext(display)
         val wm = ctx.getSystemService(WindowManager::class.java)
         val dur = Prefs.duration(this).toLong()
