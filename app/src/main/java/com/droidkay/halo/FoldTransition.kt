@@ -44,7 +44,7 @@ fun smooth(x: Float): Float {
 /** How far into the fold motion the current screen is, 0 (settled) .. 1 (fully frosted). */
 private fun foldAmount(mode: LayoutMode, angle: Float): Float =
     if (mode == LayoutMode.COVER) smooth((angle - 6f) / 50f)   // cover: frosts as you start opening
-    else smooth((172f - angle) / 112f)                          // inner: swinging half clears as it lands flat
+    else smooth((176f - angle) / 60f)                           // inner: swinging half stays frosted, clears in the last ~40° as it lands flat
 
 /**
  * A 0..1 fold value that tracks the hinge directly — no springs, no overshoot.
@@ -94,34 +94,25 @@ fun rememberFoldAmount(mode: LayoutMode, enabled: Boolean = true): State<Float> 
         if (sm == null || sensor == null) return@DisposableEffect onDispose { }
         var last = -1f
         var settle: Job? = null
-        var gestureStart = 0L
-        var lastMove = 0L
         val listener = object : SensorEventListener {
             override fun onSensorChanged(e: SensorEvent) {
                 val angle = e.values[0]
-                val moving = last >= 0f && abs(angle - last) > 0.4f
+                // The first reading after the screen wakes counts as movement when the phone is mid-fold,
+                // so opening the Fold lands on a frosted screen that clears as the hinge goes flat.
+                val first = last < 0f
+                val moving = (!first && abs(angle - last) > 0.4f) ||
+                    (first && (if (mode == LayoutMode.INNER) angle < 165f else angle > 8f))
                 last = angle
                 val amount = foldAmount(mode, angle)
-                val now = SystemClock.elapsedRealtime()
-                // A new fold gesture starts when the hinge moves after resting for a moment.
-                if (moving) {
-                    if (now - lastMove > 500L) gestureStart = now
-                    lastMove = now
-                }
-                // The frost is a quick moment per gesture, not a state that lingers while you keep moving.
-                val limit = if (mode == LayoutMode.INNER) 1100L else 1500L
-                if (moving && now - gestureStart > limit) {
-                    settle?.cancel()
-                    hinge.floatValue = 0f
-                } else if (amount <= 0f) {
+                if (amount <= 0f) {
                     settle?.cancel()
                     hinge.floatValue = 0f
                 } else if (moving) {
                     hinge.floatValue = amount
-                    // Clears once the hinge rests (Flex Mode / propped half-open stays sharp).
+                    // Clears once the hinge rests (Flex Mode / propped half-open goes sharp again).
                     settle?.cancel()
                     settle = scope.launch {
-                        delay(250)
+                        delay(650)
                         hinge.floatValue = 0f
                     }
                 }
@@ -215,7 +206,7 @@ class HalfPanelBlur {
                     return c * half(1.0 - m);
                 }
                 // Frosted glass: a touch darker and softer in tone on the moving half.
-                c.rgb *= half(1.0 - 0.10 * amount);
+                c.rgb *= half(1.0 - 0.25 * amount);
                 return c * half(m);
             }
         """
