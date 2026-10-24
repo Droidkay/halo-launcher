@@ -4,7 +4,7 @@ Big widgets, no app drawer, App Library on the last page.
 
 - **Cover screen** → iPhone layout (4 × 6 grid, 4-app dock)
 - **Inner screen** → iPad layout (6 × 6 grid, 6-app dock + 3 recent apps)
-- Each screen keeps its own layout; folding/unfolding switches instantly.
+- Each screen keeps its own layout. Folding/unfolding plays the Apple "Duo" morph: the layout you leave stretches toward the new screen shape while melting into frosted glass, the new layout resolves out of the frost, and the half that is still swinging stays frosted until the hinge lands (needs Android 12+; hinge sensor).
 
 ## Features
 - Home pages with iOS-sized widgets: Clock (analog / digital), Calendar (S/M/L), Batteries

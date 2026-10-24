@@ -112,7 +112,9 @@ fun HaloApp(state: LauncherState) {
         // Fold 5: cover screen ≈ 340–410dp wide, inner screen ≈ 670dp+.
         // Halo Pad always uses the iPadOS layout.
         val mode = if (BuildConfig.IS_PAD || smallest >= 500) LayoutMode.INNER else LayoutMode.COVER
-        key(mode) { HomeRoot(state, mode) }
+        FoldMorphHost(mode, enabled = !BuildConfig.IS_PAD) {
+            key(mode) { HomeRoot(state, mode) }
+        }
     }
 }
 
