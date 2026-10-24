@@ -28,6 +28,7 @@ object Prefs {
 object Diag {
     @Volatile var angle: Float = -1f
     @Volatile var hasSensor: Boolean = false
+    @Volatile var events: Int = 0
     private val lines = ArrayDeque<String>()
 
     @Synchronized

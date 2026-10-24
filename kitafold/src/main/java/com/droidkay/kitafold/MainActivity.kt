@@ -35,7 +35,8 @@ class MainActivity : Activity(), SensorEventListener {
             status.text = if (on) "Service: ON. Folding the phone now plays the transition."
             else "Service: OFF. Tap the first button, find \"Kita Fold\" under Installed apps and switch it on."
             status.setTextColor(if (on) Color.rgb(22, 160, 100) else Color.rgb(220, 80, 80))
-            angle.text = "Hinge sensor: " + (if (!Diag.hasSensor && FoldService.instance != null) "not found" else
+            angle.text = "Hinge readings received by the service: ${Diag.events}" +
+                (if (KeepAliveService.running) " (keep-alive on)" else " (keep-alive off)") + "\nHinge sensor: " + (if (!Diag.hasSensor && FoldService.instance != null) "not found" else
                 if (Diag.angle >= 0f) "%.0f°".format(Diag.angle) else "move the hinge…")
             log.text = Diag.text()
             ui.postDelayed(this, 300)
@@ -91,6 +92,14 @@ class MainActivity : Activity(), SensorEventListener {
             }
         })
 
+        root.addView(Button(this).apply {
+            text = "3. Test the frost (no folding needed)"
+            setOnClickListener {
+                val s = FoldService.instance
+                if (s == null) Diag.log("Turn the service on first") else s.testFrost()
+            }
+        })
+
         root.addView(slider("Duration", 1500, { Prefs.duration(this) }, { Prefs.setDuration(this, it.coerceAtLeast(250)) }, " ms"))
         root.addView(slider("Frost strength", 100, { Prefs.blur(this) }, { Prefs.setBlur(this, it) }, ""))
         root.addView(slider("Stretch", 100, { Prefs.stretch(this) }, { Prefs.setStretch(this, it) }, ""))
@@ -120,6 +129,10 @@ class MainActivity : Activity(), SensorEventListener {
 
     override fun onResume() {
         super.onResume()
+        if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1)
+        }
+        if (FoldService.instance != null) KeepAliveService.start(this)
         sm = getSystemService(SensorManager::class.java)
         val h = sm?.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE)
         if (h != null) { Diag.hasSensor = true; sm?.registerListener(this, h, SensorManager.SENSOR_DELAY_NORMAL) }
@@ -132,6 +145,6 @@ class MainActivity : Activity(), SensorEventListener {
         sm?.unregisterListener(this)
     }
 
-    override fun onSensorChanged(e: SensorEvent) { Diag.angle = e.values[0] }
+    override fun onSensorChanged(e: SensorEvent) { if (FoldService.instance == null) Diag.angle = e.values[0] }
     override fun onAccuracyChanged(s: Sensor?, a: Int) {}
 }

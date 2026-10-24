@@ -61,6 +61,7 @@ class FoldService : AccessibilityService(), SensorEventListener, DisplayManager.
         dm.registerDisplayListener(this, main)
         for (d in dm.displays) lastState[d.displayId] = d.state
         Diag.log("Service on. Hinge sensor: ${if (hinge != null) "yes" else "NO"}")
+        KeepAliveService.start(this)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
@@ -77,20 +78,40 @@ class FoldService : AccessibilityService(), SensorEventListener, DisplayManager.
     override fun onSensorChanged(e: SensorEvent) {
         val a = e.values[0]
         Diag.angle = a
-        val moved = lastAngle >= 0f && abs(a - lastAngle) > 0.6f
+        Diag.events++
+        val first = lastAngle < 0f
+        val now = SystemClock.elapsedRealtime()
+        // Treat a big jump, or the first reading after waking mid-fold, as movement.
+        val moved = (!first && abs(a - lastAngle) > 0.4f) || (first && a in 8f..165f)
         lastAngle = a
         if (!moved) return
-        val now = SystemClock.elapsedRealtime()
-        if (now - lastMoveAt > 1200L) capture(null)
+        if (now - lastMoveAt > 1200L) {
+            Diag.log("Hinge moving at %.0f°".format(a))
+            capture(null)
+        }
         lastMoveAt = now
         if (Prefs.frost(this) && !playing) {
             val d = activeDisplay()
             val inner = d != null && isInner(d)
-            val amount = if (inner) smooth((172f - a) / 112f) else smooth((a - 6f) / 50f)
+            val amount = if (inner) smooth((176f - a) / 60f) else smooth((a - 6f) / 50f)
             setFrost(amount, d, half = inner)
             main.removeCallbacks(clearFrost)
-            main.postDelayed(clearFrost, 260L)
+            main.postDelayed(clearFrost, 650L)
         }
+    }
+
+    /** Ramps the frost up and down once on the current screen, without needing the hinge. */
+    fun testFrost() {
+        val d = activeDisplay() ?: return
+        val inner = isInner(d)
+        Diag.log("Frost test on display ${d.displayId}")
+        val anim = ValueAnimator.ofFloat(0f, 1f, 1f, 0f)
+        anim.duration = 1600
+        anim.addUpdateListener { setFrost(it.animatedValue as Float, d, half = inner) }
+        anim.addListener(object : android.animation.AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: android.animation.Animator) { removeFrost() }
+        })
+        anim.start()
     }
 
     override fun onAccuracyChanged(s: Sensor?, accuracy: Int) {}
