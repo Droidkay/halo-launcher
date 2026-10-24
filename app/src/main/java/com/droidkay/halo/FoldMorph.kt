@@ -154,7 +154,7 @@ fun FoldMorphHost(mode: LayoutMode, enabled: Boolean = true, content: @Composabl
         FoldSnapshots.morphing = true
         try {
             view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-            progress.animateTo(1f, tween(760, easing = CubicBezierEasing(0.22f, 0.85f, 0.2f, 1f)))
+            progress.animateTo(1f, tween(620, easing = CubicBezierEasing(0.22f, 0.85f, 0.2f, 1f)))
         } finally {
             FoldSnapshots.morphing = false
             showOutgoing = false

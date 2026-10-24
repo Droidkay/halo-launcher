@@ -9,6 +9,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
+import android.os.SystemClock
 import android.view.WindowManager
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -59,11 +60,12 @@ fun rememberFoldAmount(mode: LayoutMode, enabled: Boolean = true): State<Float> 
     val hinge = remember { mutableFloatStateOf(0f) }
     val entry = remember { Animatable(1f) }
     val value = remember { mutableFloatStateOf(1f) }
+    val born = remember { SystemClock.elapsedRealtime() }
 
     // The screen you land on starts frosted and clears (the hinge keeps it frosted if you're still opening).
     LaunchedEffect(Unit) {
         withFrameNanos { }
-        entry.animateTo(0f, tween(520, delayMillis = 60, easing = FastOutSlowInEasing))
+        entry.animateTo(0f, tween(420, delayMillis = 40, easing = FastOutSlowInEasing))
     }
 
     // Follower: eases `value` toward the target each frame, then sleeps until the target moves again.
@@ -81,7 +83,7 @@ fun rememberFoldAmount(mode: LayoutMode, enabled: Boolean = true): State<Float> 
                 val now = withFrameNanos { it }
                 val dt = ((now - last) / 1_000_000_000f).coerceIn(0f, 0.05f)
                 last = now
-                val k = 1f - exp(-dt * 16f)
+                val k = 1f - exp(-dt * 24f)
                 value.floatValue += (target - value.floatValue) * k
             }
         }
@@ -99,7 +101,13 @@ fun rememberFoldAmount(mode: LayoutMode, enabled: Boolean = true): State<Float> 
                 val moving = last >= 0f && abs(angle - last) > 0.4f
                 last = angle
                 val amount = foldAmount(mode, angle)
-                if (amount <= 0f) {
+                // The frost is a quick moment, not a state: it only follows the hinge for the first
+                // second or so after this screen appears, however long the hinge keeps moving.
+                val limit = if (mode == LayoutMode.INNER) 800L else 1400L
+                if (SystemClock.elapsedRealtime() - born > limit) {
+                    settle?.cancel()
+                    hinge.floatValue = 0f
+                } else if (amount <= 0f) {
                     settle?.cancel()
                     hinge.floatValue = 0f
                 } else if (moving) {
@@ -107,7 +115,7 @@ fun rememberFoldAmount(mode: LayoutMode, enabled: Boolean = true): State<Float> 
                     // Clears once the hinge rests (Flex Mode / propped half-open stays sharp).
                     settle?.cancel()
                     settle = scope.launch {
-                        delay(600)
+                        delay(250)
                         hinge.floatValue = 0f
                     }
                 }
