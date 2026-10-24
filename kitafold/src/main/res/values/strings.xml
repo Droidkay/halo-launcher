@@ -1,0 +1,3 @@
+<resources>
+    <string name="service_desc">Plays a smooth frosted-glass transition on any app when you fold or unfold the phone. It takes a picture of the screen when the hinge starts to move, and never reads or stores anything.</string>
+</resources>
