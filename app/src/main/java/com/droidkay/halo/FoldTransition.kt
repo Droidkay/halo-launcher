@@ -60,7 +60,6 @@ fun rememberFoldAmount(mode: LayoutMode, enabled: Boolean = true): State<Float> 
     val hinge = remember { mutableFloatStateOf(0f) }
     val entry = remember { Animatable(1f) }
     val value = remember { mutableFloatStateOf(1f) }
-    val born = remember { SystemClock.elapsedRealtime() }
 
     // The screen you land on starts frosted and clears (the hinge keeps it frosted if you're still opening).
     LaunchedEffect(Unit) {
@@ -95,16 +94,23 @@ fun rememberFoldAmount(mode: LayoutMode, enabled: Boolean = true): State<Float> 
         if (sm == null || sensor == null) return@DisposableEffect onDispose { }
         var last = -1f
         var settle: Job? = null
+        var gestureStart = 0L
+        var lastMove = 0L
         val listener = object : SensorEventListener {
             override fun onSensorChanged(e: SensorEvent) {
                 val angle = e.values[0]
                 val moving = last >= 0f && abs(angle - last) > 0.4f
                 last = angle
                 val amount = foldAmount(mode, angle)
-                // The frost is a quick moment, not a state: it only follows the hinge for the first
-                // second or so after this screen appears, however long the hinge keeps moving.
-                val limit = if (mode == LayoutMode.INNER) 800L else 1400L
-                if (SystemClock.elapsedRealtime() - born > limit) {
+                val now = SystemClock.elapsedRealtime()
+                // A new fold gesture starts when the hinge moves after resting for a moment.
+                if (moving) {
+                    if (now - lastMove > 500L) gestureStart = now
+                    lastMove = now
+                }
+                // The frost is a quick moment per gesture, not a state that lingers while you keep moving.
+                val limit = if (mode == LayoutMode.INNER) 1100L else 1500L
+                if (moving && now - gestureStart > limit) {
                     settle?.cancel()
                     hinge.floatValue = 0f
                 } else if (amount <= 0f) {
