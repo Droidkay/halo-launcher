@@ -131,13 +131,32 @@ class FoldService : AccessibilityService(), SensorEventListener, DisplayManager.
         val d = dm.getDisplay(displayId) ?: return
         val before = lastState[displayId]
         lastState[displayId] = d.state
-        if (d.state != Display.STATE_ON || before == Display.STATE_ON) return
+        val size = android.graphics.Point()
+        @Suppress("DEPRECATION")
+        d.getRealSize(size)
+        Diag.log("Display $displayId changed: ${stateName(d.state)} ${size.x}x${size.y}")
+        if (d.state != Display.STATE_ON) return
         val s = snap ?: return
+        if (playing) return
         val fresh = SystemClock.elapsedRealtime() - snapAt < 15_000L
-        if (fresh && displayId != snapDisplay && !s.isRecycled) {
-            Diag.log("Display $displayId on, playing morph")
+        if (!fresh) return
+        // Samsung Folds use ONE logical display that changes size between the cover and inner panels,
+        // so a fold shows up as display 0 resizing, not as another display turning on.
+        val snapShort = minOf(s.width, s.height).toFloat()
+        val nowShort = minOf(size.x, size.y).toFloat()
+        val resized = snapShort > 0f && abs(nowShort - snapShort) / snapShort > 0.15f
+        val otherScreen = displayId != snapDisplay && before != Display.STATE_ON
+        if (resized || otherScreen) {
+            Diag.log("Screen switched, playing morph")
             play(d)
         }
+    }
+
+    private fun stateName(st: Int) = when (st) {
+        Display.STATE_ON -> "on"
+        Display.STATE_OFF -> "off"
+        Display.STATE_DOZE, Display.STATE_DOZE_SUSPEND -> "doze"
+        else -> "state $st"
     }
 
     fun preview() {
