@@ -405,10 +405,7 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                     }
                 }
                 .then(
-                    // Duo: Android's status bar is hidden (Halo draws its own side rail), so only
-                    // keep clear of the camera cutout.
-                    if (duo) Modifier.windowInsetsPadding(WindowInsets.displayCutout).padding(top = 6.dp)
-                    else Modifier.statusBarsPadding()
+                    Modifier.statusBarsPadding()
                 )
                 .navigationBarsPadding()
         ) {
@@ -473,10 +470,9 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                     }
                 }
             }
-            if (duo) {
+            if (sideDock && !onLibrary) {
                 SideRail(
                     state, mode, drag, launch,
-                    showDock = sideDock && !onLibrary,
                     onMenu = { menu = it },
                     onPickUp = pickUp,
                 )
@@ -1145,8 +1141,8 @@ private fun Dock(
 }
 
 /**
- * Right-edge column of the iPhone Duo layout: the vertical status rail at the top and, on the cover
- * screen or in landscape, the dock as a tall glass pill.
+ * Right-edge dock of the iPhone Duo layout (cover screen, and the inner screen in landscape):
+ * the dock as a tall glass pill.
  */
 @Composable
 private fun SideRail(
@@ -1154,7 +1150,6 @@ private fun SideRail(
     mode: LayoutMode,
     drag: DragController,
     launch: (AppInfo, Rect?) -> Unit,
-    showDock: Boolean,
     onMenu: (MenuRequest) -> Unit,
     onPickUp: () -> Unit,
 ) {
@@ -1163,13 +1158,12 @@ private fun SideRail(
     Column(
         Modifier
             .fillMaxHeight()
-            .width(if (showDock) iconSize + 28.dp else 40.dp)
+            .width(iconSize + 28.dp)
             .padding(end = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        DuoStatusRail(Modifier.padding(top = 4.dp))
         Spacer(Modifier.weight(if (mode == LayoutMode.COVER) 1.25f else 0.85f))
-        if (showDock) {
+        run {
             DisposableEffect(Unit) { onDispose { drag.dockRect = Rect.Zero } }
             Column(
                 Modifier

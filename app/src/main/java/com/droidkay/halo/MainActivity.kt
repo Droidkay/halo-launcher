@@ -8,9 +8,6 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 
 class MainActivity : ComponentActivity() {
     private lateinit var widgets: WidgetHostManager
@@ -44,24 +41,6 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         state.refreshDefaultHome()
-        hideStatusBar()
-    }
-
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) hideStatusBar()
-    }
-
-    /**
-     * iPhone "Duo" look on the Fold: Halo shows time, network and battery in its own side rail, so
-     * Android's status bar is hidden on the home screen. A swipe from the top edge still reveals it.
-     */
-    private fun hideStatusBar() {
-        if (BuildConfig.IS_PAD) return
-        WindowCompat.getInsetsController(window, window.decorView).apply {
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            hide(WindowInsetsCompat.Type.statusBars())
-        }
     }
 
     override fun onNewIntent(intent: Intent) {
