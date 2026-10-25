@@ -119,6 +119,7 @@ fun TappableIcon(
     icon: ImageBitmap?,
     size: Dp,
     enabled: Boolean = true,
+    onBounds: ((Rect) -> Unit)? = null,
     onTap: (Rect) -> Unit,
     onLongPress: (Rect) -> Unit,
 ) {
@@ -130,7 +131,10 @@ fun TappableIcon(
         icon,
         size,
         Modifier
-            .onGloballyPositioned { bounds = it.boundsInRoot() }
+            .onGloballyPositioned {
+                bounds = it.boundsInRoot()
+                onBounds?.invoke(bounds)
+            }
             .pointerInput(enabled) {
                 if (!enabled) return@pointerInput
                 detectTapGestures(

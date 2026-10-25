@@ -3,6 +3,12 @@
 package com.droidkay.halo
 
 import android.Manifest
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.round
+import kotlinx.coroutines.delay
+import kotlin.math.floor
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -131,8 +137,10 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
     val view = LocalView.current
     val scope = rememberCoroutineScope()
     val layout = state.layout(mode)
-    val pageCount = layout.pages.size
-    val pager = rememberPagerState(pageCount = { state.layout(mode).pages.size + 1 })
+    val drag = remember(mode) { DragController() }
+    // While dragging to the right of the last page, an empty page appears so the item can start a new one.
+    val pageCount = layout.pages.size + (if (drag.extraPage) 1 else 0)
+    val pager = rememberPagerState(pageCount = { state.layout(mode).pages.size + (if (drag.extraPage) 1 else 0) + 1 })
     val onLibrary = pager.currentPage >= pageCount
 
     var spotlight by remember { mutableStateOf(false) }
@@ -155,6 +163,117 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
     }
 
     val launch: (AppInfo, Rect?) -> Unit = { app, bounds -> state.launch(app, view, bounds) }
+
+    // ---------------------------------------------------------------- drag and drop (iOS style)
+    val pickUp: () -> Unit = {
+        menu = null
+        state.editMode = true
+    }
+    drag.onHover = hover@{
+        val item = drag.item ?: return@hover
+        val key = item.key
+        val p = drag.pointer
+        val spec = mode.spec()
+        // Over the dock: apps only, and only while it has room (or the app came from it).
+        if (item is HomeItem.App && drag.dockRect.contains(p)) {
+            val without = state.layout(mode).dock.filter { it != key }
+            if (drag.source == DragSpot.Dock || without.size < spec.dockSize) {
+                val r = drag.dockRect
+                val frac = if (drag.dockVertical) (p.y - r.top) / r.height else (p.x - r.left) / r.width
+                val idx = (frac * (without.size + 1)).toInt().coerceIn(0, without.size)
+                drag.dockPreview = without.toMutableList().apply { add(idx, key) }
+                drag.target = DragSpot.Dock
+                return@hover
+            }
+        }
+        if (pager.isScrollInProgress) return@hover
+        val page = pager.currentPage
+        if (page >= pageCount) return@hover
+        val geo = drag.grids[page] ?: return@hover
+        if (drag.target != DragSpot.Page(page)) {
+            val base = state.layout(mode).pages.getOrNull(page) ?: emptyList()
+            drag.pagePreview = if (base.any { it.key == key }) base else base + item
+            drag.target = DragSpot.Page(page)
+            drag.lastSwap = null
+        }
+        val col = floor((p.x - geo.origin.x) / geo.cellW).toInt()
+        val row = floor((p.y - geo.origin.y) / geo.cellH).toInt()
+        if (col !in 0 until geo.cols || row !in 0 until geo.rows) return@hover
+        val cur = drag.pagePreview
+        val from = cur.indexOfFirst { it.key == key }
+        if (from < 0) return@hover
+        val hit = pack(cur, geo.cols, geo.rows).first.firstOrNull {
+            col in it.col until it.col + it.item.spanW && row in it.row until it.row + it.item.spanH
+        }
+        val swapKey = hit?.item?.key ?: "end"
+        if (swapKey == key || swapKey == drag.lastSwap) return@hover
+        if (hit == null && from == cur.lastIndex) return@hover
+        val candidate = cur.toMutableList().apply {
+            val moving = removeAt(from)
+            if (hit == null) add(moving) else add(cur.indexOfFirst { it.key == swapKey }, moving)
+        }
+        // Only accept arrangements where the dragged item actually lands on this page.
+        if (pack(candidate, geo.cols, geo.rows).first.any { it.item.key == key }) {
+            drag.pagePreview = candidate
+            drag.lastSwap = swapKey
+        }
+    }
+    drag.onDrop = drop@{
+        val item = drag.item ?: return@drop
+        val key = item.key
+        val l = state.layout(mode)
+        val pages = l.pages.map { pg -> pg.filter { it.key != key } }.toMutableList()
+        var dock = l.dock
+        when (val t = drag.target) {
+            null -> return@drop
+            DragSpot.Dock -> {
+                if (item !is HomeItem.App) return@drop
+                dock = drag.dockPreview
+            }
+            is DragSpot.Page -> {
+                while (pages.size <= t.index) pages.add(emptyList())
+                pages[t.index] = drag.pagePreview
+                dock = dock - key
+            }
+        }
+        state.applyDrag(mode, pages, dock)
+    }
+    // Hold an item at the left/right edge to flip pages; past the last page makes a new one.
+    val edgePx = with(LocalDensity.current) { DragEdge.toPx() }
+    LaunchedEffect(drag.active) {
+        if (!drag.active) return@LaunchedEffect
+        var side = 0
+        var dwell = 0L
+        while (drag.active) {
+            delay(60)
+            val r = drag.pagerRect
+            val pt = drag.pointer
+            val s = when {
+                drag.dockRect.contains(pt) -> 0
+                pt.x < r.left + edgePx -> -1
+                pt.x > r.right - edgePx -> 1
+                else -> 0
+            }
+            if (s != side) {
+                side = s
+                dwell = 0
+            } else if (s != 0) dwell += 60
+            if (s == 0 || dwell < 520 || pager.isScrollInProgress) continue
+            dwell = 0
+            val cur = pager.currentPage
+            val homeCount = state.layout(mode).pages.size
+            val next = cur + s
+            if (next < 0) continue
+            if (s > 0 && next >= homeCount + (if (drag.extraPage) 1 else 0)) {
+                if (drag.extraPage) continue
+                drag.extraPage = true
+                delay(50)
+            }
+            pager.animateScrollToPage(next)
+            drag.target = null
+            drag.onHover()
+        }
+    }
 
     var lastSignal by remember { mutableIntStateOf(state.homeSignal) }
     LaunchedEffect(state.homeSignal) {
@@ -317,6 +436,7 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                 Modifier
                     .weight(1f)
                     .fillMaxHeight()
+                    .onGloballyPositioned { drag.pagerRect = it.boundsInRoot() }
                     .pointerInput(swipeEnabled) {
                         if (!swipeEnabled) return@pointerInput
                         var total = 0f
@@ -330,10 +450,19 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                         )
                     }
             ) {
-                HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), key = { it }) { page ->
+                HorizontalPager(
+                    state = pager,
+                    modifier = Modifier.fillMaxSize(),
+                    // Keep every page alive while dragging so the picked-up item never loses the finger.
+                    beyondBoundsPageCount = if (drag.active) pageCount else 0,
+                    userScrollEnabled = !drag.active,
+                    key = { it },
+                ) { page ->
                     val pages = state.layout(mode).pages
                     if (page < pages.size) {
-                        HomePage(state, mode, page, pages[page], launch, onMenu = { menu = it }, onOpenFolder = { folder = it })
+                        HomePage(state, mode, page, pages[page], drag, launch, onMenu = { menu = it }, onOpenFolder = { folder = it }, onPickUp = pickUp)
+                    } else if (page < pageCount) {
+                        HomePage(state, mode, page, emptyList(), drag, launch, onMenu = { menu = it }, onOpenFolder = { folder = it }, onPickUp = pickUp)
                     } else {
                         AppLibraryPage(
                             state, mode, launch,
@@ -346,9 +475,10 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
             }
             if (duo) {
                 SideRail(
-                    state, mode, launch,
+                    state, mode, drag, launch,
                     showDock = sideDock && !onLibrary,
                     onMenu = { menu = it },
+                    onPickUp = pickUp,
                 )
             }
             }
@@ -365,10 +495,12 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                         dotsOnly = duo,
                         onSearch = { spotlight = true },
                     )
-                    if (!sideDock) Dock(state, mode, launch, onMenu = { menu = it })
+                    if (!sideDock) Dock(state, mode, drag, launch, onMenu = { menu = it }, onPickUp = pickUp)
                 }
             }
         }
+
+        DragGhost(state, drag)
 
         AnimatedVisibility(visible = spotlight, enter = fadeIn(), exit = fadeOut()) {
             SearchOverlay(
@@ -480,17 +612,14 @@ private fun HomePage(
     mode: LayoutMode,
     pageIndex: Int,
     items: List<HomeItem>,
+    drag: DragController,
     launch: (AppInfo, Rect?) -> Unit,
     onMenu: (MenuRequest) -> Unit,
     onOpenFolder: (String) -> Unit,
+    onPickUp: () -> Unit,
 ) {
     val spec = mode.spec()
     val density = LocalDensity.current
-    var working by remember(items) { mutableStateOf(items) }
-    var dragKey by remember { mutableStateOf<String?>(null) }
-    var dragPos by remember { mutableStateOf(Offset.Zero) }
-    var dragGrab by remember { mutableStateOf(Offset.Zero) }
-    var lastSwap by remember { mutableStateOf<String?>(null) }
     val haptic = LocalHapticFeedback.current
 
     BoxWithConstraints(
@@ -520,12 +649,22 @@ private fun HomePage(
             edit = state.editMode,
         )
     }
+    DisposableEffect(pageIndex) { onDispose { drag.grids.remove(pageIndex) } }
     BoxWithConstraints(
         Modifier
             .align(if (duoInner && wide) Alignment.TopEnd else Alignment.TopCenter)
             .padding(end = if (duoInner && wide) 8.dp else 0.dp)
             .width(gridW)
             .fillMaxHeight()
+            .onGloballyPositioned { c ->
+                drag.grids[pageIndex] = GridGeo(
+                    c.positionInRoot(),
+                    c.size.width / spec.cols.toFloat(),
+                    c.size.height / spec.rows.toFloat(),
+                    spec.cols,
+                    spec.rows,
+                )
+            }
     ) {
         val cellWdp = maxWidth / spec.cols
         val cellHdp = maxHeight / spec.rows
@@ -540,109 +679,133 @@ private fun HomePage(
         val widgetUnit = min(cellWdp, cellHdp)
         // iOS shows the widget's name under it.
         val labelSpace = if (BuildConfig.IS_PAD) 0.dp else 16.dp
-        val placed = remember(working, spec) { pack(working, spec.cols, spec.rows).first }
 
-        fun reorder() {
-            val key = dragKey ?: return
-            val col = (dragPos.x / cellW).toInt().coerceIn(0, spec.cols - 1)
-            val row = (dragPos.y / cellH).toInt().coerceIn(0, spec.rows - 1)
-            val current = working
-            val layoutNow = pack(current, spec.cols, spec.rows).first
-            val hit = layoutNow.firstOrNull {
-                col in it.col until it.col + it.item.spanW && row in it.row until it.row + it.item.spanH
-            }
-            val from = current.indexOfFirst { it.key == key }
-            if (from < 0) return
-            if (hit == null) {
-                if (from != current.lastIndex && lastSwap != "end") {
-                    val candidate = current.toMutableList().apply { add(removeAt(from)) }
-                    if (fits(candidate, spec)) {
-                        working = candidate
-                        lastSwap = "end"
-                    }
-                }
-                return
-            }
-            if (hit.item.key == key || hit.item.key == lastSwap) return
-            val to = current.indexOfFirst { it.key == hit.item.key }
-            val candidate = current.toMutableList().apply { add(to, removeAt(from)) }
-            if (fits(candidate, spec)) {
-                working = candidate
-                lastSwap = hit.item.key
-            }
+        // While something is being dragged, show where it would land (iOS: the others make room).
+        val dragKey = drag.key
+        val display = when {
+            dragKey == null -> items
+            drag.target == DragSpot.Page(pageIndex) -> drag.pagePreview
+            else -> items.filter { it.key != dragKey }
         }
+        val placed = pack(display, spec.cols, spec.rows).first
+        // The picked-up item stays composed (invisibly) on its own page: it owns the finger's gesture.
+        val anchor = if (dragKey != null && drag.source == DragSpot.Page(pageIndex) && placed.none { it.item.key == dragKey }) {
+            pack(items, spec.cols, spec.rows).first.firstOrNull { it.item.key == dragKey }
+        } else null
+        val shown = if (anchor != null) placed + anchor else placed
 
-        fun finishDrag() {
-            if (dragKey != null && working != items) state.setPage(mode, pageIndex, working)
-            dragKey = null
-            lastSwap = null
-        }
-
-        placed.forEachIndexed { index, p ->
+        shown.forEachIndexed { index, p ->
             key(p.item.key) {
+                val item = p.item
                 val target = IntOffset((p.col * cellW).roundToInt(), (p.row * cellH).roundToInt())
                 val animated by animateIntOffsetAsState(
                     target,
                     spring(stiffness = Spring.StiffnessMediumLow),
                     label = "slot",
                 )
-                val currentOffset by rememberUpdatedState(animated)
-                val dragging = dragKey == p.item.key
-                val itemOffset = if (dragging) {
-                    IntOffset((dragPos.x - dragGrab.x).roundToInt(), (dragPos.y - dragGrab.y).roundToInt())
-                } else animated
-                val itemKey = p.item.key
+                val isDragged = dragKey == item.key
+                var iconBounds by remember { mutableStateOf(Rect.Zero) }
+                val frameH = widgetUnit * item.spanH - 12.dp - labelSpace
+                val frameW = run {
+                    // Keep widgets in iOS proportions on wide tablet cells.
+                    val ratio = when {
+                        item.spanW == item.spanH && item.spanW <= 2 -> 1f
+                        item.spanW > item.spanH -> 2.15f
+                        else -> 1.05f
+                    }
+                    min(cellWdp * item.spanW - 12.dp, frameH * ratio)
+                }
+                val sizePx = IntSize((cellW * item.spanW).roundToInt(), (cellH * item.spanH).roundToInt())
                 Box(
                     Modifier
-                        .offset { itemOffset }
-                        .size(cellWdp * p.item.spanW, cellHdp * p.item.spanH)
-                        .zIndex(if (dragging) 1f else 0f)
-                        .jiggle(state.editMode && !dragging, index)
-                        .pointerInput(state.editMode, itemKey) {
-                            if (!state.editMode) return@pointerInput
-                            detectDragGestures(
-                                onDragStart = { local ->
-                                    dragKey = itemKey
-                                    dragGrab = local
-                                    dragPos = Offset(currentOffset.x + local.x, currentOffset.y + local.y)
-                                    lastSwap = null
-                                },
-                                onDrag = { change, amount ->
-                                    change.consume()
-                                    dragPos += amount
-                                    reorder()
-                                },
-                                onDragEnd = { finishDrag() },
-                                onDragCancel = { finishDrag() },
-                            )
-                        }
+                        .offset { animated }
+                        .size(cellWdp * item.spanW, cellHdp * item.spanH)
+                        .homeGestures(
+                            key = item.key,
+                            editMode = state.editMode,
+                            pickUpWithoutEdit = true,
+                            onTap = {
+                                when (item) {
+                                    is HomeItem.App -> state.appMap[item.component]?.let { launch(it, iconBounds) }
+                                    is HomeItem.Folder -> onOpenFolder(item.key)
+                                    else -> {}
+                                }
+                            },
+                            onEditTap = { if (item is HomeItem.Folder) onOpenFolder(item.key) },
+                            onLongPress = {
+                                when (item) {
+                                    is HomeItem.App -> onMenu(MenuRequest(MenuTarget.HomeApp(item.component), iconBounds))
+                                    is HomeItem.Folder -> onMenu(MenuRequest(MenuTarget.HomeFolder(item.key), iconBounds))
+                                    else -> {} // widgets open their own menu
+                                }
+                            },
+                            onPickUp = { grab, at ->
+                                onPickUp()
+                                drag.start(item, DragSpot.Page(pageIndex), grab, at, GhostLook(sizePx, iconSize, frameW, frameH, labelW))
+                            },
+                            onMove = { drag.move(it) },
+                            onDrop = { drag.drop() },
+                        )
+                        .jiggle(state.editMode && !isDragged, index)
+                        .graphicsLayer { alpha = if (isDragged) 0f else 1f }
                 ) {
                     HomeItemContent(
                         state = state,
                         mode = mode,
-                        item = p.item,
+                        item = item,
                         iconSize = iconSize,
                         labelWidth = labelW,
                         widgetLabel = labelSpace > 0.dp,
-                        frameW = run {
-                            // Keep widgets in iOS proportions on wide tablet cells.
-                            val h = widgetUnit * p.item.spanH - 12.dp - labelSpace
-                            val ratio = when {
-                                p.item.spanW == p.item.spanH && p.item.spanW <= 2 -> 1f
-                                p.item.spanW > p.item.spanH -> 2.15f
-                                else -> 1.05f
-                            }
-                            min(cellWdp * p.item.spanW - 12.dp, h * ratio)
-                        },
-                        frameH = widgetUnit * p.item.spanH - 12.dp - labelSpace,
+                        frameW = frameW,
+                        frameH = frameH,
                         launch = launch,
                         onMenu = onMenu,
                         onOpenFolder = onOpenFolder,
+                        onIconBounds = { iconBounds = it },
                     )
                 }
             }
         }
     }
+    }
+}
+
+/** The item floating under the finger while it is being moved. */
+@Composable
+private fun DragGhost(state: LauncherState, drag: DragController) {
+    val item = drag.item ?: return
+    val look = drag.look ?: return
+    val density = LocalDensity.current
+    Box(
+        Modifier
+            .offset { (drag.pointer - drag.grab).round() }
+            .size(with(density) { look.size.width.toDp() }, with(density) { look.size.height.toDp() })
+            .graphicsLayer {
+                scaleX = 1.1f
+                scaleY = 1.1f
+                alpha = 0.95f
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        when (item) {
+            is HomeItem.App -> AppIconImage(state.icons[item.component], look.iconSize)
+            is HomeItem.Folder -> FolderCell(
+                state = state, folder = item, iconSize = look.iconSize, edit = false,
+                onOpen = {}, onLongPress = {}, onRemove = {}, gestures = false,
+            )
+            is HomeItem.BuiltIn -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                Box(Modifier.padding(top = 6.dp).size(look.frameW, look.frameH)) { BuiltInWidget(item.kind, item.size) }
+            }
+            is HomeItem.Hosted -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                Box(
+                    Modifier
+                        .padding(top = 6.dp)
+                        .size(look.frameW, look.frameH)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(Color.White.copy(alpha = 0.35f))
+                )
+            }
+        }
     }
 }
 
@@ -684,6 +847,7 @@ private fun HomeItemContent(
     launch: (AppInfo, Rect?) -> Unit,
     onMenu: (MenuRequest) -> Unit,
     onOpenFolder: (String) -> Unit,
+    onIconBounds: (Rect) -> Unit = {},
 ) {
     val edit = state.editMode
     when (item) {
@@ -695,6 +859,8 @@ private fun HomeItemContent(
                 iconSize = iconSize,
                 edit = edit,
                 labelWidth = labelWidth,
+                handleGestures = false,
+                onIconBounds = onIconBounds,
                 onTap = { r -> launch(app, r) },
                 onLongPress = { r -> onMenu(MenuRequest(MenuTarget.HomeApp(app.key), r)) },
                 onRemove = { state.removeFromHome(mode, app.key) },
@@ -709,6 +875,8 @@ private fun HomeItemContent(
                 onOpen = { onOpenFolder(item.key) },
                 onLongPress = { r -> onMenu(MenuRequest(MenuTarget.HomeFolder(item.key), r)) },
                 onRemove = { state.removeFromHome(mode, item.key) },
+                gestures = false,
+                onBounds = onIconBounds,
             )
         }
         is HomeItem.BuiltIn -> {
@@ -763,13 +931,15 @@ fun AppCell(
     modifier: Modifier = Modifier.fillMaxSize(),
     showLabel: Boolean = true,
     labelWidth: Dp? = null,
+    handleGestures: Boolean = true,
+    onIconBounds: ((Rect) -> Unit)? = null,
     onTap: (Rect) -> Unit,
     onLongPress: (Rect) -> Unit,
     onRemove: (() -> Unit)?,
 ) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Box {
-            TappableIcon(icon, iconSize, enabled = !edit, onTap = onTap, onLongPress = onLongPress)
+            TappableIcon(icon, iconSize, enabled = handleGestures && !edit, onBounds = onIconBounds, onTap = onTap, onLongPress = onLongPress)
             if (edit && onRemove != null) {
                 MinusBadge(onRemove, Modifier.align(Alignment.TopStart).offset((-7).dp, (-7).dp))
             }
@@ -838,18 +1008,95 @@ private fun WidgetFrame(
 
 // ------------------------------------------------------------------ dock, search pill, edit bar
 
+/** Dock apps with the live drag preview, laid out by the caller's Row (bottom dock) or Column (side dock). */
 @Composable
-private fun Dock(state: LauncherState, mode: LayoutMode, launch: (AppInfo, Rect?) -> Unit, onMenu: (MenuRequest) -> Unit) {
+private fun DockIcons(
+    state: LauncherState,
+    mode: LayoutMode,
+    drag: DragController,
+    iconSize: Dp,
+    launch: (AppInfo, Rect?) -> Unit,
+    onMenu: (MenuRequest) -> Unit,
+    onPickUp: () -> Unit,
+    showSpacerWhenEmpty: Boolean = true,
+) {
     val layout = state.layout(mode)
-    val dockApps = layout.dock.mapNotNull { state.appMap[it] }
-    val recentExtras = if (mode == LayoutMode.INNER) {
+    val edit = state.editMode
+    val density = LocalDensity.current
+    val dragKey = drag.key
+    val keys = when {
+        dragKey == null -> layout.dock
+        drag.target == DragSpot.Dock -> drag.dockPreview
+        else -> layout.dock.filter { it != dragKey }
+    }
+    // An app dragged out of the dock stays composed (zero-sized) because it owns the finger's gesture.
+    val anchor = if (dragKey != null && drag.source == DragSpot.Dock && dragKey !in keys) dragKey else null
+    if (keys.isEmpty() && showSpacerWhenEmpty) Spacer(Modifier.size(iconSize))
+    (keys + listOfNotNull(anchor)).forEachIndexed { i, k ->
+        key(k) {
+            val app = state.appMap[k]
+            if (app != null) {
+                val isDragged = k == dragKey
+                var iconBounds by remember { mutableStateOf(Rect.Zero) }
+                val px = with(density) { iconSize.roundToPx() }
+                Box(
+                    Modifier
+                        .size(if (k == anchor) 0.dp else iconSize)
+                        .homeGestures(
+                            key = k,
+                            editMode = edit,
+                            pickUpWithoutEdit = true,
+                            onTap = { launch(app, iconBounds) },
+                            onEditTap = {},
+                            onLongPress = { onMenu(MenuRequest(MenuTarget.DockApp(k), iconBounds)) },
+                            onPickUp = { grab, at ->
+                                onPickUp()
+                                drag.start(HomeItem.App(k), DragSpot.Dock, grab, at, GhostLook(IntSize(px, px), iconSize, iconSize, iconSize, null))
+                            },
+                            onMove = { drag.move(it) },
+                            onDrop = { drag.drop() },
+                        )
+                        .jiggle(edit && !isDragged, i + 7)
+                        .graphicsLayer { alpha = if (isDragged) 0f else 1f }
+                ) {
+                    AppCell(
+                        app = app,
+                        icon = state.icons[app.key],
+                        iconSize = iconSize,
+                        edit = edit,
+                        modifier = Modifier,
+                        showLabel = false,
+                        handleGestures = false,
+                        onIconBounds = { iconBounds = it },
+                        onTap = {},
+                        onLongPress = {},
+                        onRemove = { state.removeFromDock(mode, k) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Dock(
+    state: LauncherState,
+    mode: LayoutMode,
+    drag: DragController,
+    launch: (AppInfo, Rect?) -> Unit,
+    onMenu: (MenuRequest) -> Unit,
+    onPickUp: () -> Unit,
+) {
+    val layout = state.layout(mode)
+    val recentExtras = if (BuildConfig.IS_PAD) {
         // Pad in portrait: 8 dock apps already fill the width, so recents only show in landscape.
         val portrait = LocalConfiguration.current.let { it.screenHeightDp > it.screenWidthDp }
-        state.recents.filter { it !in layout.dock }.mapNotNull { state.appMap[it] }
-            .take(if (BuildConfig.IS_PAD && portrait) 0 else 3)
+        state.recents.filter { it !in layout.dock }.mapNotNull { state.appMap[it] }.take(if (portrait) 0 else 3)
     } else emptyList()
     val iconSize = if (mode == LayoutMode.INNER) 60.dp else 56.dp
     val edit = state.editMode
+    val grow = with(LocalDensity.current) { 16.dp.toPx() }
+    DisposableEffect(Unit) { onDispose { drag.dockRect = Rect.Zero } }
     Box(
         Modifier
             .fillMaxWidth()
@@ -863,26 +1110,15 @@ private fun Dock(state: LauncherState, mode: LayoutMode, launch: (AppInfo, Rect?
                     if (BuildConfig.IS_PAD) Modifier.liquidGlass(RoundedCornerShape(34.dp))
                     else Modifier.clip(RoundedCornerShape(32.dp)).background(Color.White.copy(alpha = 0.22f))
                 )
+                .onGloballyPositioned {
+                    drag.dockRect = it.boundsInRoot().inflate(grow)
+                    drag.dockVertical = false
+                }
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             horizontalArrangement = if (mode == LayoutMode.COVER) Arrangement.SpaceEvenly else Arrangement.spacedBy(18.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (dockApps.isEmpty() && recentExtras.isEmpty()) Spacer(Modifier.height(iconSize))
-            dockApps.forEachIndexed { i, app ->
-                Box(Modifier.jiggle(edit, i + 7)) {
-                    AppCell(
-                        app = app,
-                        icon = state.icons[app.key],
-                        iconSize = iconSize,
-                        edit = edit,
-                        modifier = Modifier,
-                        showLabel = false,
-                        onTap = { r -> launch(app, r) },
-                        onLongPress = { r -> onMenu(MenuRequest(MenuTarget.DockApp(app.key), r)) },
-                        onRemove = { state.removeFromDock(mode, app.key) },
-                    )
-                }
-            }
+            DockIcons(state, mode, drag, iconSize, launch, onMenu, onPickUp, showSpacerWhenEmpty = recentExtras.isEmpty())
             if (recentExtras.isNotEmpty()) {
                 Box(
                     Modifier
@@ -916,11 +1152,14 @@ private fun Dock(state: LauncherState, mode: LayoutMode, launch: (AppInfo, Rect?
 private fun SideRail(
     state: LauncherState,
     mode: LayoutMode,
+    drag: DragController,
     launch: (AppInfo, Rect?) -> Unit,
     showDock: Boolean,
     onMenu: (MenuRequest) -> Unit,
+    onPickUp: () -> Unit,
 ) {
     val iconSize = if (mode == LayoutMode.COVER) 46.dp else 52.dp
+    val grow = with(LocalDensity.current) { 16.dp.toPx() }
     Column(
         Modifier
             .fillMaxHeight()
@@ -931,32 +1170,20 @@ private fun SideRail(
         DuoStatusRail(Modifier.padding(top = 4.dp))
         Spacer(Modifier.weight(if (mode == LayoutMode.COVER) 1.25f else 0.85f))
         if (showDock) {
-            val dockApps = state.layout(mode).dock.mapNotNull { state.appMap[it] }
-            val edit = state.editMode
+            DisposableEffect(Unit) { onDispose { drag.dockRect = Rect.Zero } }
             Column(
                 Modifier
                     .clip(RoundedCornerShape(30.dp))
                     .background(Color.White.copy(alpha = 0.22f))
+                    .onGloballyPositioned {
+                        drag.dockRect = it.boundsInRoot().inflate(grow)
+                        drag.dockVertical = true
+                    }
                     .padding(horizontal = 7.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                if (dockApps.isEmpty()) Spacer(Modifier.size(iconSize))
-                dockApps.forEachIndexed { i, app ->
-                    Box(Modifier.jiggle(edit, i + 7)) {
-                        AppCell(
-                            app = app,
-                            icon = state.icons[app.key],
-                            iconSize = iconSize,
-                            edit = edit,
-                            modifier = Modifier,
-                            showLabel = false,
-                            onTap = { r -> launch(app, r) },
-                            onLongPress = { r -> onMenu(MenuRequest(MenuTarget.DockApp(app.key), r)) },
-                            onRemove = { state.removeFromDock(mode, app.key) },
-                        )
-                    }
-                }
+                DockIcons(state, mode, drag, iconSize, launch, onMenu, onPickUp)
             }
         }
         Spacer(Modifier.weight(1f))

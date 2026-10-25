@@ -198,6 +198,26 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
         commit(mode, l.copy(pages = l.pages.toMutableList().also { it[index] = items }))
     }
 
+    /**
+     * Saves the result of a drag: [pages] may hold a page that's too full now, so whatever doesn't
+     * fit is pushed onto the start of the next page (making a new page at the end if needed), like iOS.
+     */
+    fun applyDrag(mode: LayoutMode, pages: List<List<HomeItem>>, dock: List<String>) {
+        val spec = mode.spec()
+        val out = pages.map { it.toMutableList() }.toMutableList()
+        var i = 0
+        while (i < out.size) {
+            val (_, overflow) = pack(out[i], spec.cols, spec.rows)
+            if (overflow.isNotEmpty()) {
+                out[i].removeAll { o -> overflow.any { it.key == o.key } }
+                if (i + 1 >= out.size) out.add(mutableListOf())
+                out[i + 1].addAll(0, overflow)
+            }
+            i++
+        }
+        commit(mode, layout(mode).copy(pages = out, dock = dock.distinct().take(spec.dockSize)))
+    }
+
     fun isOnHome(mode: LayoutMode, key: String): Boolean = layout(mode).pages.any { p ->
         p.any { it.key == key || (it is HomeItem.Folder && key in it.apps) }
     }

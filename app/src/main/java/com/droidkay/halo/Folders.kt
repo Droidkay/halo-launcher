@@ -66,6 +66,8 @@ fun FolderCell(
     onOpen: () -> Unit,
     onLongPress: (Rect) -> Unit,
     onRemove: () -> Unit,
+    gestures: Boolean = true,
+    onBounds: ((Rect) -> Unit)? = null,
 ) {
     var bounds by remember { mutableStateOf(Rect.Zero) }
     val haptic = LocalHapticFeedback.current
@@ -76,12 +78,17 @@ fun FolderCell(
             Box(
                 Modifier
                     .size(iconSize)
-                    .onGloballyPositioned { bounds = it.boundsInRoot() }
+                    .onGloballyPositioned {
+                        bounds = it.boundsInRoot()
+                        onBounds?.invoke(bounds)
+                    }
                     .then(
                         if (BuildConfig.IS_PAD) Modifier.liquidGlass(SquircleShape, rim = 1.dp)
                         else Modifier.clip(SquircleShape).background(Color.White.copy(alpha = 0.30f))
                     )
-                    .pointerInput(edit) {
+                    .pointerInput(edit, gestures) {
+                        // On the home grid, taps and long-presses are handled by the item's drag handler.
+                        if (!gestures) return@pointerInput
                         detectTapGestures(
                             onTap = { open() },
                             onLongPress = {
