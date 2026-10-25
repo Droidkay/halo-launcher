@@ -26,7 +26,13 @@ jobs:
           gradle-version: '8.7'
 
       - name: Build Halo
-        run: gradle assembleFoldRelease --stacktrace
+        run: |
+          set -o pipefail
+          gradle assembleFoldRelease --stacktrace 2>&1 | tee build.log
+      - name: Report compile errors
+        if: failure()
+        run: |
+          grep -E "^e: |What went wrong" -A1 build.log | head -60 | while IFS= read -r l; do echo "::error::$l"; done
 
       - name: Enable KVM
         run: |
