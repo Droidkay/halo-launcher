@@ -189,7 +189,8 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
         val p = drag.pointer
         val spec = mode.spec()
         // Over the dock: apps only, and only while it has room (or the app came from it).
-        if (item is HomeItem.App && drag.dockRect.contains(p)) {
+        val atScreenEdge = p.x < edgeStripPx || (drag.rootWidth > 0f && p.x > drag.rootWidth - edgeStripPx)
+        if (item is HomeItem.App && !atScreenEdge && drag.dockRect.contains(p)) {
             val without = state.layout(mode).dock.filter { it != key }
             if (drag.source == DragSpot.Dock || without.size < spec.dockSize) {
                 val r = drag.dockRect
@@ -254,6 +255,7 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
     }
     // Hold an item at the left/right edge to flip pages; past the last page makes a new one.
     val edgePx = with(LocalDensity.current) { DragEdge.toPx() }
+    val edgeStripPx = with(LocalDensity.current) { 22.dp.toPx() }
     LaunchedEffect(drag.active) {
         if (!drag.active) return@LaunchedEffect
         var side = 0
@@ -263,8 +265,10 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
             val r = drag.pagerRect
             val pt = drag.pointer
             val s = when {
+                // The very edge of the screen always flips pages, even where the side dock is.
+                pt.x < r.left + edgePx || pt.x < edgeStripPx -> -1
+                drag.rootWidth > 0f && pt.x > drag.rootWidth - edgeStripPx -> 1
                 drag.dockRect.contains(pt) -> 0
-                pt.x < r.left + edgePx -> -1
                 pt.x > r.right - edgePx -> 1
                 else -> 0
             }
@@ -272,7 +276,7 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                 side = s
                 dwell = 0
             } else if (s != 0) dwell += 60
-            if (s == 0 || dwell < 520 || pager.isScrollInProgress) continue
+            if (s == 0 || dwell < 450 || pager.isScrollInProgress) continue
             dwell = 0
             val cur = pager.currentPage
             val homeCount = state.layout(mode).pages.size
@@ -400,7 +404,7 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
     }
 
     CompositionLocalProvider(LocalWallpaperBlur provides blurSupported) {
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().onGloballyPositioned { drag.rootWidth = it.size.width.toFloat() }) {
         if (HaloSettings.wallpaperDim > 0.01f) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = HaloSettings.wallpaperDim)))
         }
@@ -437,14 +441,8 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                     onWallpaper = { openWallpaperPicker(context) },
                     onDone = { state.editMode = false },
                     onSettings = { settingsOpen = true },
-                    onAutoFolders = ({
-                        val n = state.addCategoryFolders(mode)
-                        Toast.makeText(
-                            context,
-                            if (n > 0) "Added $n category folders" else "Apps sorted into your folders",
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                    }).takeUnless { BuildConfig.IS_PAD },
+                    // Auto Folders now lives in Settings → Layout (keeps the cover screen's bar from overflowing).
+                    onAutoFolders = null,
                 )
             }
             if (!state.isDefaultHome && !state.bannerDismissed && !state.editMode && !onLibrary) {
@@ -935,7 +933,7 @@ private fun HomeItemContent(
             val context = LocalContext.current
             val scope = rememberCoroutineScope()
             val askLocation = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-                if (granted) scope.launch { WeatherRepo.refresh(context, force = true) }
+                scope.launch { WeatherRepo.refresh(context, force = granted) }
             }
             WidgetFrame(
                 frameW, frameH, edit,
@@ -945,7 +943,10 @@ private fun HomeItemContent(
                     when (item.kind) {
                         WidgetKind.GOOGLE -> onGoogleWidgetTap(context, item.size, at.x, at.y)
                         WidgetKind.WEATHER -> when {
-                            !WeatherRepo.hasPermission(context) -> askLocation.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                            WeatherRepo.shouldAskLocation(context) -> {
+                                WeatherRepo.markAsked(context)
+                                askLocation.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                            }
                             WeatherRepo.data == null -> scope.launch { WeatherRepo.refresh(context, force = true) }
                             else -> openWeatherApp(context)
                         }

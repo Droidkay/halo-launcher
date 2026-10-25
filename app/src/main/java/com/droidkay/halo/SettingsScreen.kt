@@ -242,6 +242,27 @@ fun SettingsScreen(state: LauncherState, current: LayoutMode, onDismiss: () -> U
                         HaloSettings.updateLockLayout(it)
                         if (it) state.editMode = false
                     }
+                    if (!BuildConfig.IS_PAD) {
+                        Line()
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val n = state.addCategoryFolders(screen)
+                                    Toast.makeText(
+                                        context,
+                                        if (n > 0) "Added $n category folders" else "Apps sorted into your folders",
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                }
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                        ) {
+                            Column {
+                                Text("Auto Folders", color = IosBlue, fontSize = 16.sp)
+                                Text("Sort every app into category folders (Social, Entertainment…) on the ${if (screen == LayoutMode.COVER) "cover" else "inner"} screen.", color = IosGray, fontSize = 13.sp)
+                            }
+                        }
+                    }
                     Line()
                     Row(
                         Modifier

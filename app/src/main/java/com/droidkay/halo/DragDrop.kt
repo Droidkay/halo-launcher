@@ -67,6 +67,8 @@ class DragController {
     var dockRect = Rect.Zero
     var dockVertical = false
     var pagerRect = Rect.Zero
+    /** Width of the whole screen: the last few dp at either edge always mean "next/previous page". */
+    var rootWidth = 0f
 
     /** Set by HomeRoot each composition: works out the drop target for the current pointer. */
     var onHover: () -> Unit = {}

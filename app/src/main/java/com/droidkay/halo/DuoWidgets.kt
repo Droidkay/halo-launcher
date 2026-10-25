@@ -297,6 +297,14 @@ object WeatherRepo {
     private var loading = false
     private var cacheRead = false
 
+    /** Location is asked for once (first tap); after that a tap opens the weather app. */
+    fun shouldAskLocation(context: Context): Boolean =
+        !hasPermission(context) && !prefs(context).getBoolean("asked", false)
+
+    fun markAsked(context: Context) {
+        prefs(context).edit().putBoolean("asked", true).apply()
+    }
+
     fun hasPermission(context: Context): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -311,7 +319,7 @@ object WeatherRepo {
 
     suspend fun refresh(context: Context, force: Boolean = false) {
         readCache(context)
-        if (!hasPermission(context) || loading) return
+        if (loading) return
         val d = data
         if (!force && d != null && System.currentTimeMillis() - d.fetchedAt < 30 * 60_000L) return
         loading = true
@@ -333,9 +341,10 @@ object WeatherRepo {
 
     private suspend fun fetch(context: Context): WeatherData? {
         val p = prefs(context)
-        val loc = location(context)
+        val loc = if (hasPermission(context)) location(context) else null
         val lat: Double
         val lon: Double
+        var place: String? = null
         if (loc != null) {
             lat = loc.latitude
             lon = loc.longitude
@@ -343,7 +352,24 @@ object WeatherRepo {
         } else if (p.contains("lat")) {
             lat = p.getFloat("lat", 0f).toDouble()
             lon = p.getFloat("lon", 0f).toDouble()
-        } else return null
+        } else {
+            // No location (yet): use the city of the phone's time zone, e.g. Africa/Lagos → Lagos.
+            val city = TimeZone.getDefault().id.substringAfterLast('/').replace('_', ' ')
+            val geo = runCatching {
+                val conn = URL("https://geocoding-api.open-meteo.com/v1/search?count=1&name=" + java.net.URLEncoder.encode(city, "UTF-8"))
+                    .openConnection() as HttpURLConnection
+                conn.connectTimeout = 10_000
+                conn.readTimeout = 10_000
+                try {
+                    JSONObject(conn.inputStream.bufferedReader().use { it.readText() }).getJSONArray("results").getJSONObject(0)
+                } finally {
+                    conn.disconnect()
+                }
+            }.getOrNull() ?: return null
+            lat = geo.getDouble("latitude")
+            lon = geo.getDouble("longitude")
+            place = geo.optString("name", city)
+        }
 
         val f = useFahrenheit()
         val url = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon" +
@@ -386,7 +412,7 @@ object WeatherRepo {
                 )
             }
             WeatherData(
-                city = cityName(context, lat, lon),
+                city = place ?: cityName(context, lat, lon),
                 temp = cur.getDouble("temperature_2m").roundToInt(),
                 code = cur.getInt("weather_code"),
                 isDay = cur.getInt("is_day") == 1,
@@ -524,7 +550,6 @@ fun WeatherWidget(size: WidgetSize) {
                 Spacer(Modifier.height(6.dp))
                 Text(
                     when {
-                        !WeatherRepo.hasPermission(context) -> "Tap to show weather for your location"
                         WeatherRepo.failed -> "Couldn't load weather. Tap to retry."
                         else -> "Updating…"
                     },
