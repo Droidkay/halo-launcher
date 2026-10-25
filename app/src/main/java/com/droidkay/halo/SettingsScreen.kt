@@ -116,7 +116,7 @@ fun SettingsScreen(state: LauncherState, current: LayoutMode, onDismiss: () -> U
                     }
                     Line()
                     Choice(
-                        "Page indicator",
+                        "Page indicator (inner screen)",
                         listOf("dots" to "Dots", "search" to "Search pill"),
                         HaloSettings.pageIndicator,
                     ) { HaloSettings.updatePageIndicator(it) }

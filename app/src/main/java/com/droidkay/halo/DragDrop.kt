@@ -233,4 +233,4 @@ fun Modifier.homeGestures(
 }
 
 /** Default spacing used to decide that the finger is "at the edge" of the pager. */
-val DragEdge: Dp = 36.dp
+val DragEdge: Dp = 64.dp

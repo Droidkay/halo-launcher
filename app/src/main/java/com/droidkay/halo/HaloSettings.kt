@@ -36,7 +36,7 @@ object HaloSettings {
         dockEnabled = p.getBoolean("dockEnabled", true)
         dockCount = p.getInt("dockCount", 4)
         dockBackground = p.getBoolean("dockBackground", true)
-        coverSideDock = p.getBoolean("coverSideDock", true)
+        coverSideDock = p.getBoolean("coverSideDock", false)
         landscapeSideDock = p.getBoolean("landscapeSideDock", true)
         pageIndicator = p.getString("pageIndicator", "dots") ?: "dots"
         swipeDown = p.getString("swipeDown", "spotlight") ?: "spotlight"
@@ -106,7 +106,7 @@ object HaloSettings {
         private set
     var dockBackground by mutableStateOf(true)
         private set
-    var coverSideDock by mutableStateOf(true)
+    var coverSideDock by mutableStateOf(false)
         private set
     var landscapeSideDock by mutableStateOf(true)
         private set

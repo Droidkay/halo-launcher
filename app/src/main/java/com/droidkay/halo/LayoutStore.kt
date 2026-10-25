@@ -168,6 +168,12 @@ class LayoutStore(context: Context) {
 
     fun duoVersion(): Int = prefs.getInt("duo_version", 0)
 
+    fun coverClassic(): Boolean = prefs.getBoolean("cover_classic", false)
+
+    fun setCoverClassic() {
+        prefs.edit().putBoolean("cover_classic", true).apply()
+    }
+
     fun setDuoVersion(v: Int) {
         prefs.edit().putInt("duo_version", v).apply()
     }

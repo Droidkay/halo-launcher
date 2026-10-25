@@ -57,7 +57,7 @@ echo "dragging $LBL at $P"
 if [ -n "$LBL" ]; then
   read cx cy x1 y1 x2 y2 <<< "$P"
   IY=$((y1 - 60))
-  drag $cx $IY $((W - 6)) $((H / 3)) 2.5 02-drag-to-edge $((W / 2)) $((H / 3))
+  drag $cx $IY $((W - 150)) $((H / 3)) 2.5 02-drag-to-edge $((W / 2)) $((H / 3))
   dump 02-after-drag
 fi
 adb logcat -d -s HaloLayout > $OUT/02-layout-log.txt
@@ -113,7 +113,7 @@ W=904; H=2176
 for name in Clock Camera Contacts Files Calendar Maps Photos YouTube Chrome Settings; do
   if P=$(find 08-cover "$name"); then
     read cx cy x1 y1 x2 y2 <<< "$P"
-    drag $cx $((y1 - 60)) $((W - 6)) $((H / 3)) 2.5 09-cover-drag-right-edge 450 $((H / 3))
+    drag $cx $((y1 - 60)) $((W - 20)) $((H / 8)) 2.5 09-cover-drag-right-edge 450 $((H / 3))
     break
   fi
 done

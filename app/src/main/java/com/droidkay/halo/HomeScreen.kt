@@ -256,6 +256,7 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
     }
     // Hold an item at the left/right edge to flip pages; past the last page makes a new one.
     val edgePx = with(LocalDensity.current) { DragEdge.toPx() }
+    val gridGap = with(LocalDensity.current) { 14.dp.toPx() }
     LaunchedEffect(drag.active) {
         if (!drag.active) return@LaunchedEffect
         var side = 0
@@ -264,19 +265,25 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
             delay(60)
             val r = drag.pagerRect
             val pt = drag.pointer
+            val geo = drag.grids[pager.currentPage]
+            val gridLeft = geo?.origin?.x ?: 0f
+            val gridRight = geo?.let { it.origin.x + it.cellW * it.cols } ?: 0f
             val s = when {
                 // The very edge of the screen always flips pages, even where the side dock is.
-                pt.x < r.left + edgePx || pt.x < edgeStripPx -> -1
+                pt.x < edgeStripPx -> -1
                 drag.rootWidth > 0f && pt.x > drag.rootWidth - edgeStripPx -> 1
                 drag.dockRect.contains(pt) -> 0
-                pt.x > r.right - edgePx -> 1
+                // A real finger carrying an icon rarely gets right to the glass edge, so the outer
+                // 64dp counts, and so does the empty space beside a centred grid.
+                pt.x < r.left + edgePx || (geo != null && pt.x < gridLeft - gridGap) -> -1
+                pt.x > r.right - edgePx || (geo != null && pt.x > gridRight + gridGap) -> 1
                 else -> 0
             }
             if (s != side) {
                 side = s
                 dwell = 0
             } else if (s != 0) dwell += 60
-            if (s == 0 || dwell < 450 || pager.isScrollInProgress) continue
+            if (s == 0 || dwell < 400 || pager.isScrollInProgress) continue
             dwell = 0
             val cur = pager.currentPage
             val homeCount = state.layout(mode).pages.size
@@ -520,7 +527,8 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                         scrolling = pager.isScrollInProgress,
                         count = pageCount,
                         current = pager.currentPage,
-                        dotsOnly = duo && HaloSettings.pageIndicator == "dots",
+                        // Cover screen keeps classic Halo's Search pill; the inner screen follows Settings.
+                        dotsOnly = duo && mode == LayoutMode.INNER && HaloSettings.pageIndicator == "dots",
                         onSearch = { spotlight = true },
                     )
                     if (!sideDock && dockOn) Dock(state, mode, drag, launch, onMenu = { menu = it }, onPickUp = pickUp)
@@ -718,16 +726,17 @@ private fun HomePage(
         val cellW = with(density) { cellWdp.toPx() }
         val cellH = with(density) { cellHdp.toPx() }
         val iconSize = when {
-            BuildConfig.IS_PAD -> min(min(cellWdp * 0.64f, cellHdp * 0.56f), 74.dp)
+            // Halo Pad and the cover screen: classic Halo sizing.
+            BuildConfig.IS_PAD || mode == LayoutMode.COVER -> min(min(cellWdp * 0.64f, cellHdp * 0.56f), 74.dp)
             mode == LayoutMode.COVER -> min(min(cellWdp * 0.78f, cellHdp * 0.52f), 62.dp)
             else -> min(min(cellWdp * 0.6f, cellHdp * 0.52f), 64.dp)
         }.let { base ->
             if (BuildConfig.IS_PAD) base else min(base * HaloSettings.iconScale, min(cellWdp * 0.94f, cellHdp * 0.8f))
         }
-        val labelW = if (BuildConfig.IS_PAD) null else cellWdp - 2.dp
+        val labelW = if (BuildConfig.IS_PAD || mode == LayoutMode.COVER) null else cellWdp - 2.dp
         val widgetUnit = min(cellWdp, cellHdp)
         // iOS shows the widget's name under it.
-        val labelSpace = if (BuildConfig.IS_PAD || !HaloSettings.widgetLabels) 0.dp else 16.dp
+        val labelSpace = if (BuildConfig.IS_PAD || mode == LayoutMode.COVER || !HaloSettings.widgetLabels) 0.dp else 16.dp
 
         // While something is being dragged, show where it would land (iOS: the others make room).
         val dragKey = drag.key

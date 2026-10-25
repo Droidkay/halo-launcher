@@ -78,6 +78,17 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
             LayoutMode.values().forEach { m -> layouts[m]?.let { commit(m, migrateToDuo(m, it)) } }
             store.setDuoVersion(DUO_LAYOUT_VERSION)
         }
+        // Cover screen went back to classic Halo: take off the Google/Weather widgets the Duo update added there.
+        if (!BuildConfig.IS_PAD && !store.coverClassic()) {
+            layouts[LayoutMode.COVER]?.let { l ->
+                val first = l.pages.firstOrNull().orEmpty()
+                val cleaned = first.filterIndexed { i, it ->
+                    !(i < 2 && it is HomeItem.BuiltIn && (it.kind == WidgetKind.GOOGLE || it.kind == WidgetKind.WEATHER))
+                }
+                if (cleaned.size != first.size) commit(LayoutMode.COVER, l.copy(pages = listOf(cleaned) + l.pages.drop(1)))
+            }
+            store.setCoverClassic()
+        }
         // Grid / dock sizes come from Settings and may have changed since the layout was saved.
         if (!BuildConfig.IS_PAD) reflowAll()
         launcherApps.registerCallback(callback, Handler(Looper.getMainLooper()))
@@ -510,10 +521,14 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
             }
         }
 
-        // iPhone Duo start: Google + Weather widgets on top, apps underneath.
-        val first = mutableListOf<HomeItem>(
+        // Inner screen (iPhone Duo): Google + Weather on top. Cover screen: classic Halo widgets.
+        val first = if (mode == LayoutMode.INNER) mutableListOf<HomeItem>(
             HomeItem.BuiltIn(1L, WidgetKind.GOOGLE, WidgetSize.SMALL),
             HomeItem.BuiltIn(2L, WidgetKind.WEATHER, WidgetSize.SMALL),
+        ) else mutableListOf(
+            HomeItem.BuiltIn(1L, WidgetKind.CLOCK, WidgetSize.MEDIUM),
+            HomeItem.BuiltIn(2L, WidgetKind.CALENDAR, WidgetSize.SMALL),
+            HomeItem.BuiltIn(3L, WidgetKind.BATTERY, WidgetSize.SMALL),
         )
         fill(first, favorites)
         fill(first, others)
