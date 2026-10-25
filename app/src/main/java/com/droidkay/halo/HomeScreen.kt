@@ -183,6 +183,7 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
         menu = null
         state.editMode = true
     }
+    val edgeStripPx = with(LocalDensity.current) { 22.dp.toPx() }
     drag.onHover = hover@{
         val item = drag.item ?: return@hover
         val key = item.key
@@ -255,7 +256,6 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
     }
     // Hold an item at the left/right edge to flip pages; past the last page makes a new one.
     val edgePx = with(LocalDensity.current) { DragEdge.toPx() }
-    val edgeStripPx = with(LocalDensity.current) { 22.dp.toPx() }
     LaunchedEffect(drag.active) {
         if (!drag.active) return@LaunchedEffect
         var side = 0
