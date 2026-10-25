@@ -73,6 +73,11 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
         val resetPad = BuildConfig.IS_PAD && store.layoutVersion() < PAD_LAYOUT_VERSION
         if (!resetPad) LayoutMode.values().forEach { m -> store.load(m)?.let { layouts[m] = it } }
         if (resetPad) store.setLayoutVersion(PAD_LAYOUT_VERSION)
+        // Halo (Fold) moved to the iPhone "Duo" layout: re-flow saved screens into the 4-column grid once.
+        if (!BuildConfig.IS_PAD && store.duoVersion() < DUO_LAYOUT_VERSION) {
+            LayoutMode.values().forEach { m -> layouts[m]?.let { commit(m, migrateToDuo(m, it)) } }
+            store.setDuoVersion(DUO_LAYOUT_VERSION)
+        }
         launcherApps.registerCallback(callback, Handler(Looper.getMainLooper()))
         loadApps()
     }
@@ -350,6 +355,43 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
         }
     }
 
+    /**
+     * Keeps everything the user had, but re-packs each page into the 4-column grid (spilling onto new
+     * pages after it when needed), trims the dock to 4 (extra dock apps go to the home screen) and puts
+     * the Google and Weather widgets at the top of page one.
+     */
+    private fun migrateToDuo(mode: LayoutMode, old: ScreenLayout): ScreenLayout {
+        val spec = mode.spec()
+        val dock = old.dock.take(spec.dockSize)
+        val all = old.pages.flatten()
+        val lead = buildList<HomeItem> {
+            if (all.none { it is HomeItem.BuiltIn && it.kind == WidgetKind.GOOGLE }) {
+                add(HomeItem.BuiltIn(System.currentTimeMillis(), WidgetKind.GOOGLE, WidgetSize.SMALL))
+            }
+            if (all.none { it is HomeItem.BuiltIn && it.kind == WidgetKind.WEATHER }) {
+                add(HomeItem.BuiltIn(System.currentTimeMillis() + 1, WidgetKind.WEATHER, WidgetSize.SMALL))
+            }
+        }
+        val moved = old.dock.drop(spec.dockSize).filter { k -> all.none { it.key == k } }.map { HomeItem.App(it) }
+        val sources = old.pages.mapIndexed { i, p ->
+            (if (i == 0) lead + p else p) + (if (i == old.pages.lastIndex) moved else emptyList())
+        }
+        val pages = mutableListOf<List<HomeItem>>()
+        sources.forEach { items ->
+            var cur = mutableListOf<HomeItem>()
+            items.forEach { item ->
+                if (fits(cur + item, spec)) {
+                    cur.add(item)
+                } else {
+                    if (cur.isNotEmpty()) pages += cur
+                    cur = mutableListOf(item)
+                }
+            }
+            if (cur.isNotEmpty()) pages += cur
+        }
+        return ScreenLayout(pages, dock)
+    }
+
     private fun createDefault(mode: LayoutMode): ScreenLayout =
         if (BuildConfig.IS_PAD) createPadDefault() else createPhoneDefault(mode)
 
@@ -400,9 +442,8 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
         val camera = resolve(Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA))
             ?: firstInstalled("com.sec.android.app.camera")
 
-        val dockPkgs = listOfNotNull(phone, messages, browser, camera) +
-            if (mode == LayoutMode.INNER) listOf("com.whatsapp", "com.google.android.youtube") else emptyList()
-        val dock = dockPkgs.mapNotNull { keyFor(it) }.distinct().toMutableList()
+        val dockPkgs = listOfNotNull(phone, messages, browser, camera)
+        val dock = dockPkgs.mapNotNull { keyFor(it) }.distinct().take(spec.dockSize).toMutableList()
 
         val favorites = FAVORITES.mapNotNull { keyFor(it) }.distinct().filter { it !in dock }.toMutableList()
         val others = apps.map { it.key }.filter { it !in dock && it !in favorites }.toMutableList()
@@ -418,10 +459,10 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
             }
         }
 
+        // iPhone Duo start: Google + Weather widgets on top, apps underneath.
         val first = mutableListOf<HomeItem>(
-            HomeItem.BuiltIn(1L, WidgetKind.CLOCK, WidgetSize.MEDIUM),
-            HomeItem.BuiltIn(2L, WidgetKind.CALENDAR, WidgetSize.SMALL),
-            HomeItem.BuiltIn(3L, WidgetKind.BATTERY, WidgetSize.SMALL),
+            HomeItem.BuiltIn(1L, WidgetKind.GOOGLE, WidgetSize.SMALL),
+            HomeItem.BuiltIn(2L, WidgetKind.WEATHER, WidgetSize.SMALL),
         )
         fill(first, favorites)
         fill(first, others)
@@ -436,6 +477,7 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
 
     companion object {
         private const val PAD_LAYOUT_VERSION = 2
+        private const val DUO_LAYOUT_VERSION = 1
         private val PAD_DOCK = listOf(
             "com.android.chrome", "com.google.android.youtube", "com.whatsapp", "com.google.android.gm",
             "com.miui.gallery", "com.google.android.apps.photos", "com.android.camera", "com.android.settings",

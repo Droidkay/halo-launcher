@@ -130,6 +130,8 @@ fun BuiltInWidget(kind: WidgetKind, size: WidgetSize) {
         WidgetKind.CLOCK -> ClockWidget(size)
         WidgetKind.CALENDAR -> CalendarWidget(size)
         WidgetKind.BATTERY -> BatteryWidget(size)
+        WidgetKind.GOOGLE -> GoogleWidget(size)
+        WidgetKind.WEATHER -> WeatherWidget(size)
     }
 }
 

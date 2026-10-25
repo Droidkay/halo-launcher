@@ -244,5 +244,7 @@ fun openBuiltInWidget(context: Context, kind: WidgetKind) {
             context.safeStart(Intent(Intent.ACTION_VIEW).setData(builder.build()))
         }
         WidgetKind.BATTERY -> context.safeStart(Intent(Intent.ACTION_POWER_USAGE_SUMMARY))
+        WidgetKind.GOOGLE -> onGoogleWidgetTap(context, WidgetSize.SMALL, 0f, 0f)
+        WidgetKind.WEATHER -> openWeatherApp(context)
     }
 }

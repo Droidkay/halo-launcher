@@ -2,7 +2,14 @@
 
 package com.droidkay.halo
 
+import android.Manifest
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -245,6 +252,10 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
     val fold = rememberFoldAmount(mode, enabled = !BuildConfig.IS_PAD)
     val halfBlur = remember { HalfPanelBlur() }
     val landscape = LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
+    // iPhone "Duo" layout (Halo on the Fold): side status rail, and the dock moves to the right
+    // edge on the cover screen and when the inner screen is held sideways.
+    val duo = !BuildConfig.IS_PAD
+    val sideDock = duo && (mode == LayoutMode.COVER || landscape)
     WallpaperBlurDriver(blurSupported) {
         val f = if (mode == LayoutMode.COVER) fold.value else 0f
         maxOf(overlayBlur, f) * 100f
@@ -274,7 +285,12 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                         }
                     }
                 }
-                .statusBarsPadding()
+                .then(
+                    // Duo: Android's status bar is hidden (Halo draws its own side rail), so only
+                    // keep clear of the camera cutout.
+                    if (duo) Modifier.windowInsetsPadding(WindowInsets.displayCutout).padding(top = 6.dp)
+                    else Modifier.statusBarsPadding()
+                )
                 .navigationBarsPadding()
         ) {
             AnimatedVisibility(visible = state.editMode && !onLibrary) {
@@ -296,10 +312,11 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                 DefaultHomeBanner(onSet = { openHomeSettings(context) }, onDismiss = { state.dismissBanner() })
             }
             val swipeEnabled = !onLibrary && !state.editMode
+            Row(Modifier.weight(1f).fillMaxWidth()) {
             Box(
                 Modifier
                     .weight(1f)
-                    .fillMaxWidth()
+                    .fillMaxHeight()
                     .pointerInput(swipeEnabled) {
                         if (!swipeEnabled) return@pointerInput
                         var total = 0f
@@ -327,6 +344,14 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                     }
                 }
             }
+            if (duo) {
+                SideRail(
+                    state, mode, launch,
+                    showDock = sideDock && !onLibrary,
+                    onMenu = { menu = it },
+                )
+            }
+            }
             AnimatedVisibility(
                 visible = !onLibrary,
                 enter = fadeIn() + slideInVertically { it },
@@ -337,9 +362,10 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                         scrolling = pager.isScrollInProgress,
                         count = pageCount,
                         current = pager.currentPage,
+                        dotsOnly = duo,
                         onSearch = { spotlight = true },
                     )
-                    Dock(state, mode, launch, onMenu = { menu = it })
+                    if (!sideDock) Dock(state, mode, launch, onMenu = { menu = it })
                 }
             }
         }
@@ -470,7 +496,6 @@ private fun HomePage(
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .padding(horizontal = 8.dp)
             .pointerInput(Unit) {
                 detectTapGestures(onLongPress = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -478,12 +503,43 @@ private fun HomePage(
                 })
             }
     ) {
+    // Duo inner screen: an iPhone-sized grid centred on the big screen (pushed right in landscape,
+    // with extra widgets on the left of page one), instead of stretching icons across it.
+    val duoInner = !BuildConfig.IS_PAD && mode == LayoutMode.INNER
+    val wide = maxWidth > maxHeight
+    val rowUnit = maxHeight / spec.rows
+    val gridW = if (duoInner) min(maxWidth - 16.dp, rowUnit * spec.cols * 1.04f) else maxWidth - 16.dp
+    if (duoInner && wide && pageIndex == 0) {
+        SideWidgets(
+            Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 16.dp)
+                .width(maxWidth - gridW - 40.dp)
+                .fillMaxHeight(),
+            unit = rowUnit,
+            edit = state.editMode,
+        )
+    }
+    BoxWithConstraints(
+        Modifier
+            .align(if (duoInner && wide) Alignment.TopEnd else Alignment.TopCenter)
+            .padding(end = if (duoInner && wide) 8.dp else 0.dp)
+            .width(gridW)
+            .fillMaxHeight()
+    ) {
         val cellWdp = maxWidth / spec.cols
         val cellHdp = maxHeight / spec.rows
         val cellW = with(density) { cellWdp.toPx() }
         val cellH = with(density) { cellHdp.toPx() }
-        val iconSize = min(min(cellWdp * 0.64f, cellHdp * 0.56f), 74.dp)
+        val iconSize = when {
+            BuildConfig.IS_PAD -> min(min(cellWdp * 0.64f, cellHdp * 0.56f), 74.dp)
+            mode == LayoutMode.COVER -> min(min(cellWdp * 0.78f, cellHdp * 0.52f), 62.dp)
+            else -> min(min(cellWdp * 0.6f, cellHdp * 0.52f), 64.dp)
+        }
+        val labelW = if (BuildConfig.IS_PAD) null else cellWdp - 2.dp
         val widgetUnit = min(cellWdp, cellHdp)
+        // iOS shows the widget's name under it.
+        val labelSpace = if (BuildConfig.IS_PAD) 0.dp else 16.dp
         val placed = remember(working, spec) { pack(working, spec.cols, spec.rows).first }
 
         fun reorder() {
@@ -566,9 +622,11 @@ private fun HomePage(
                         mode = mode,
                         item = p.item,
                         iconSize = iconSize,
+                        labelWidth = labelW,
+                        widgetLabel = labelSpace > 0.dp,
                         frameW = run {
                             // Keep widgets in iOS proportions on wide tablet cells.
-                            val h = widgetUnit * p.item.spanH - 12.dp
+                            val h = widgetUnit * p.item.spanH - 12.dp - labelSpace
                             val ratio = when {
                                 p.item.spanW == p.item.spanH && p.item.spanW <= 2 -> 1f
                                 p.item.spanW > p.item.spanH -> 2.15f
@@ -576,11 +634,37 @@ private fun HomePage(
                             }
                             min(cellWdp * p.item.spanW - 12.dp, h * ratio)
                         },
-                        frameH = widgetUnit * p.item.spanH - 12.dp,
+                        frameH = widgetUnit * p.item.spanH - 12.dp - labelSpace,
                         launch = launch,
                         onMenu = onMenu,
                         onOpenFolder = onOpenFolder,
                     )
+                }
+            }
+        }
+    }
+    }
+}
+
+/** Landscape inner screen, page one: the iPhone Duo's extra widgets to the left of the app grid. */
+@Composable
+private fun SideWidgets(modifier: Modifier, unit: Dp, edit: Boolean) {
+    val context = LocalContext.current
+    BoxWithConstraints(modifier) {
+        val side = min(unit * 2 - 28.dp, (maxWidth - 14.dp) / 2)
+        if (side < 90.dp) return@BoxWithConstraints
+        Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            listOf(WidgetKind.CALENDAR, WidgetKind.BATTERY).forEach { kind ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        Modifier
+                            .size(side)
+                            .clip(RoundedCornerShape(22.dp))
+                            .clickable(enabled = !edit) { openBuiltInWidget(context, kind) }
+                    ) {
+                        BuiltInWidget(kind, WidgetSize.SMALL)
+                    }
+                    Text(kind.title, style = labelStyle(11.sp), modifier = Modifier.padding(top = 4.dp))
                 }
             }
         }
@@ -593,6 +677,8 @@ private fun HomeItemContent(
     mode: LayoutMode,
     item: HomeItem,
     iconSize: Dp,
+    labelWidth: Dp?,
+    widgetLabel: Boolean,
     frameW: Dp,
     frameH: Dp,
     launch: (AppInfo, Rect?) -> Unit,
@@ -608,6 +694,7 @@ private fun HomeItemContent(
                 icon = state.icons[app.key],
                 iconSize = iconSize,
                 edit = edit,
+                labelWidth = labelWidth,
                 onTap = { r -> launch(app, r) },
                 onLongPress = { r -> onMenu(MenuRequest(MenuTarget.HomeApp(app.key), r)) },
                 onRemove = { state.removeFromHome(mode, app.key) },
@@ -626,10 +713,25 @@ private fun HomeItemContent(
         }
         is HomeItem.BuiltIn -> {
             val context = LocalContext.current
+            val scope = rememberCoroutineScope()
+            val askLocation = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                if (granted) scope.launch { WeatherRepo.refresh(context, force = true) }
+            }
             WidgetFrame(
                 frameW, frameH, edit,
+                label = if (widgetLabel) item.kind.title else null,
                 onRemove = { state.removeFromHome(mode, item.key) },
-                onTap = { openBuiltInWidget(context, item.kind) },
+                onTap = { at ->
+                    when (item.kind) {
+                        WidgetKind.GOOGLE -> onGoogleWidgetTap(context, item.size, at.x, at.y)
+                        WidgetKind.WEATHER -> when {
+                            !WeatherRepo.hasPermission(context) -> askLocation.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                            WeatherRepo.data == null -> scope.launch { WeatherRepo.refresh(context, force = true) }
+                            else -> openWeatherApp(context)
+                        }
+                        else -> openBuiltInWidget(context, item.kind)
+                    }
+                },
                 onLongPress = { r -> onMenu(MenuRequest(MenuTarget.Widget(item.key), r)) },
             ) {
                 BuiltInWidget(item.kind, item.size)
@@ -660,6 +762,7 @@ fun AppCell(
     edit: Boolean,
     modifier: Modifier = Modifier.fillMaxSize(),
     showLabel: Boolean = true,
+    labelWidth: Dp? = null,
     onTap: (Rect) -> Unit,
     onLongPress: (Rect) -> Unit,
     onRemove: (() -> Unit)?,
@@ -679,7 +782,7 @@ fun AppCell(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.widthIn(max = iconSize + 24.dp),
+                modifier = Modifier.widthIn(max = labelWidth ?: (iconSize + 24.dp)),
             )
         }
     }
@@ -690,8 +793,9 @@ private fun WidgetFrame(
     frameW: Dp,
     frameH: Dp,
     edit: Boolean,
+    label: String? = null,
     onRemove: () -> Unit,
-    onTap: (() -> Unit)?,
+    onTap: ((Offset) -> Unit)?,
     onLongPress: ((Rect) -> Unit)?,
     onBounds: ((Rect) -> Unit)? = null,
     content: @Composable () -> Unit,
@@ -700,7 +804,7 @@ private fun WidgetFrame(
     val haptic = LocalHapticFeedback.current
     val tap by rememberUpdatedState(onTap)
     val longPress by rememberUpdatedState(onLongPress)
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier
                 .padding(top = 6.dp)
@@ -712,7 +816,10 @@ private fun WidgetFrame(
                 .pointerInput(edit, onTap != null) {
                     if (edit || (tap == null && longPress == null)) return@pointerInput
                     detectTapGestures(
-                        onTap = { tap?.invoke() },
+                        onTap = { pos ->
+                            // Hand over where the tap landed, as a fraction of the widget's size.
+                            tap?.invoke(Offset(pos.x / size.width.coerceAtLeast(1), pos.y / size.height.coerceAtLeast(1)))
+                        },
                         onLongPress = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             longPress?.invoke(bounds)
@@ -722,6 +829,9 @@ private fun WidgetFrame(
         ) {
             content()
             if (edit) MinusBadge(onRemove, Modifier.align(Alignment.TopStart).offset((-7).dp, (-7).dp))
+        }
+        if (label != null) {
+            Text(label, style = labelStyle(11.sp), maxLines = 1, modifier = Modifier.padding(top = 3.dp))
         }
     }
 }
@@ -798,16 +908,71 @@ private fun Dock(state: LauncherState, mode: LayoutMode, launch: (AppInfo, Rect?
     }
 }
 
+/**
+ * Right-edge column of the iPhone Duo layout: the vertical status rail at the top and, on the cover
+ * screen or in landscape, the dock as a tall glass pill.
+ */
 @Composable
-private fun SearchOrDots(scrolling: Boolean, count: Int, current: Int, onSearch: () -> Unit) {
+private fun SideRail(
+    state: LauncherState,
+    mode: LayoutMode,
+    launch: (AppInfo, Rect?) -> Unit,
+    showDock: Boolean,
+    onMenu: (MenuRequest) -> Unit,
+) {
+    val iconSize = if (mode == LayoutMode.COVER) 46.dp else 52.dp
+    Column(
+        Modifier
+            .fillMaxHeight()
+            .width(if (showDock) iconSize + 28.dp else 40.dp)
+            .padding(end = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        DuoStatusRail(Modifier.padding(top = 4.dp))
+        Spacer(Modifier.weight(if (mode == LayoutMode.COVER) 1.25f else 0.85f))
+        if (showDock) {
+            val dockApps = state.layout(mode).dock.mapNotNull { state.appMap[it] }
+            val edit = state.editMode
+            Column(
+                Modifier
+                    .clip(RoundedCornerShape(30.dp))
+                    .background(Color.White.copy(alpha = 0.22f))
+                    .padding(horizontal = 7.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                if (dockApps.isEmpty()) Spacer(Modifier.size(iconSize))
+                dockApps.forEachIndexed { i, app ->
+                    Box(Modifier.jiggle(edit, i + 7)) {
+                        AppCell(
+                            app = app,
+                            icon = state.icons[app.key],
+                            iconSize = iconSize,
+                            edit = edit,
+                            modifier = Modifier,
+                            showLabel = false,
+                            onTap = { r -> launch(app, r) },
+                            onLongPress = { r -> onMenu(MenuRequest(MenuTarget.DockApp(app.key), r)) },
+                            onRemove = { state.removeFromDock(mode, app.key) },
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun SearchOrDots(scrolling: Boolean, count: Int, current: Int, dotsOnly: Boolean = false, onSearch: () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
-            .height(34.dp),
+            .height(if (dotsOnly) 26.dp else 34.dp),
         contentAlignment = Alignment.Center,
     ) {
         // iPadOS shows page dots only; the phone keeps the iOS Search pill.
-        Crossfade(targetState = scrolling || BuildConfig.IS_PAD, label = "pill") { isScrolling ->
+        Crossfade(targetState = scrolling || BuildConfig.IS_PAD || dotsOnly, label = "pill") { isScrolling ->
             if (isScrolling) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     for (i in 0 until count) {

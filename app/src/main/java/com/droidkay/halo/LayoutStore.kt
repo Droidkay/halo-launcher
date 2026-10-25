@@ -6,12 +6,15 @@ import org.json.JSONObject
 
 enum class LayoutMode { COVER, INNER }
 
-/** Grid size per screen: the cover screen behaves like an iPhone, the inner screen like an iPad. */
+/**
+ * Grid size per screen. Halo (Fold) uses the iPhone "Duo" layout on both screens: a compact
+ * 4-column iPhone grid with a 4-app dock (on the right edge on the cover and in landscape).
+ * Halo Pad keeps the iPadOS grid.
+ */
 data class GridSpec(val cols: Int, val rows: Int, val dockSize: Int)
 
 fun LayoutMode.spec(): GridSpec =
     if (BuildConfig.IS_PAD) GridSpec(cols = 8, rows = 5, dockSize = 8)
-    else if (this == LayoutMode.INNER) GridSpec(cols = 6, rows = 6, dockSize = 6)
     else GridSpec(cols = 4, rows = 6, dockSize = 4)
 
 enum class WidgetSize(val w: Int, val h: Int, val title: String) {
@@ -23,7 +26,9 @@ enum class WidgetSize(val w: Int, val h: Int, val title: String) {
 enum class WidgetKind(val title: String) {
     CLOCK("Clock"),
     CALENDAR("Calendar"),
-    BATTERY("Batteries");
+    BATTERY("Batteries"),
+    GOOGLE("Google"),
+    WEATHER("Weather");
 
     val sizes: List<WidgetSize>
         get() = if (this == CALENDAR) listOf(WidgetSize.SMALL, WidgetSize.MEDIUM, WidgetSize.LARGE)
@@ -158,6 +163,12 @@ class LayoutStore(context: Context) {
 
     fun setLayoutVersion(v: Int) {
         prefs.edit().putInt("layout_version", v).apply()
+    }
+
+    fun duoVersion(): Int = prefs.getInt("duo_version", 0)
+
+    fun setDuoVersion(v: Int) {
+        prefs.edit().putInt("duo_version", v).apply()
     }
 
     fun bannerDismissed(): Boolean = prefs.getBoolean("banner_dismissed", false)
