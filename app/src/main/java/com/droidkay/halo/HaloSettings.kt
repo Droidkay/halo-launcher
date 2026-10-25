@@ -52,16 +52,16 @@ object HaloSettings {
     }
 
     // ---- home screen grid
-    var coverCols by mutableIntStateOf(4
+    var coverCols by mutableIntStateOf(4)
         private set
-    var coverRows by mutableIntStateOf(6
+    var coverRows by mutableIntStateOf(6)
         private set
-    var innerCols by mutableIntStateOf(4
+    var innerCols by mutableIntStateOf(4)
         private set
-    var innerRows by mutableIntStateOf(6
+    var innerRows by mutableIntStateOf(6)
         private set
     /** Inner screen: iPhone-sized grid in the middle (true) or icons spread across the whole screen. */
-    var innerCentered by mutableStateOf(true
+    var innerCentered by mutableStateOf(true)
         private set
 
     fun setGrid(mode: LayoutMode, cols: Int, rows: Int) {
@@ -77,19 +77,19 @@ object HaloSettings {
     fun updateInnerCentered(v: Boolean) { innerCentered = v; save { putBoolean("innerCentered", v) } }
 
     // ---- icons
-    var iconScale by mutableFloatStateOf(1f
+    var iconScale by mutableFloatStateOf(1f)
         private set
-    var showLabels by mutableStateOf(true
+    var showLabels by mutableStateOf(true)
         private set
-    var labelScale by mutableFloatStateOf(1f
+    var labelScale by mutableFloatStateOf(1f)
         private set
-    var widgetLabels by mutableStateOf(true
+    var widgetLabels by mutableStateOf(true)
         private set
     /** squircle, circle, rounded, square, teardrop */
-    var iconShape by mutableStateOf("squircle"
+    var iconShape by mutableStateOf("squircle")
         private set
     /** Package name of the icon pack, or "" for the apps' own icons. */
-    var iconPack by mutableStateOf(""
+    var iconPack by mutableStateOf("")
         private set
 
     fun updateIconScale(v: Float) { iconScale = v; save { putFloat("iconScale", v) } }
@@ -100,15 +100,15 @@ object HaloSettings {
     fun updateIconPack(v: String) { iconPack = v; save { putString("iconPack", v) } }
 
     // ---- dock
-    var dockEnabled by mutableStateOf(true
+    var dockEnabled by mutableStateOf(true)
         private set
-    var dockCount by mutableIntStateOf(4
+    var dockCount by mutableIntStateOf(4)
         private set
-    var dockBackground by mutableStateOf(true
+    var dockBackground by mutableStateOf(true)
         private set
-    var coverSideDock by mutableStateOf(true
+    var coverSideDock by mutableStateOf(true)
         private set
-    var landscapeSideDock by mutableStateOf(true
+    var landscapeSideDock by mutableStateOf(true)
         private set
 
     fun updateDockEnabled(v: Boolean) { dockEnabled = v; save { putBoolean("dockEnabled", v) } }
@@ -119,20 +119,20 @@ object HaloSettings {
 
     // ---- look & gestures
     /** dots or search */
-    var pageIndicator by mutableStateOf("dots"
+    var pageIndicator by mutableStateOf("dots")
         private set
     /** spotlight, notifications, library, none */
-    var swipeDown by mutableStateOf("spotlight"
+    var swipeDown by mutableStateOf("spotlight")
         private set
-    var swipeUp by mutableStateOf("none"
+    var swipeUp by mutableStateOf("none")
         private set
-    var doubleTap by mutableStateOf("none"
+    var doubleTap by mutableStateOf("none")
         private set
-    var appLibrary by mutableStateOf(true
+    var appLibrary by mutableStateOf(true)
         private set
-    var lockLayout by mutableStateOf(false
+    var lockLayout by mutableStateOf(false)
         private set
-    var wallpaperDim by mutableFloatStateOf(0f
+    var wallpaperDim by mutableFloatStateOf(0f)
         private set
 
     fun updatePageIndicator(v: String) { pageIndicator = v; save { putString("pageIndicator", v) } }
