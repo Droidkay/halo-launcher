@@ -19,6 +19,7 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
+        HaloSettings.init(this)
         widgets = WidgetHostManager(this)
         state = LauncherState(applicationContext, widgets)
         // A home screen never closes on Back; the screens inside handle Back themselves.

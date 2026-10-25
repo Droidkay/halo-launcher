@@ -78,6 +78,8 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
             LayoutMode.values().forEach { m -> layouts[m]?.let { commit(m, migrateToDuo(m, it)) } }
             store.setDuoVersion(DUO_LAYOUT_VERSION)
         }
+        // Grid / dock sizes come from Settings and may have changed since the layout was saved.
+        if (!BuildConfig.IS_PAD) reflowAll()
         launcherApps.registerCallback(callback, Handler(Looper.getMainLooper()))
         loadApps()
     }
@@ -121,7 +123,7 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
                 val rendered = withContext(Dispatchers.Default) {
                     chunk.mapNotNull { app ->
                         runCatching {
-                            app.key to renderIcon(app.info.getIcon(DisplayMetrics.DENSITY_XXXHIGH), iconPx).asImageBitmap()
+                            app.key to renderAppIcon(context, app, iconPx).asImageBitmap()
                         }.getOrNull()
                     }
                 }
@@ -190,6 +192,11 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
         val n = layout.normalized()
         layouts[mode] = n
         store.save(mode, n)
+        android.util.Log.d(
+            "HaloLayout",
+            "$mode dock=${n.dock.map { it.substringBefore('/') }} pages=" +
+                n.pages.mapIndexed { i, p -> "$i:${p.map { it.key.substringBefore('/').substringAfterLast('.') }}" },
+        )
     }
 
     fun setPage(mode: LayoutMode, index: Int, items: List<HomeItem>) {
@@ -216,6 +223,30 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
             i++
         }
         commit(mode, layout(mode).copy(pages = out, dock = dock.distinct().take(spec.dockSize)))
+    }
+
+    /** Re-fits a screen after its grid or dock size changed: overflow moves to later pages, extra dock apps to the home screen. */
+    fun reflow(mode: LayoutMode) {
+        val l = layouts[mode] ?: return
+        val spec = mode.spec()
+        val extra = l.dock.drop(spec.dockSize).filter { k -> l.pages.none { p -> p.any { it.key == k } } }.map { HomeItem.App(it) }
+        val pages = l.pages.toMutableList()
+        if (extra.isNotEmpty()) pages[pages.lastIndex] = pages.last() + extra
+        applyDrag(mode, pages, l.dock.take(spec.dockSize))
+    }
+
+    fun reflowAll() = LayoutMode.values().forEach { reflow(it) }
+
+    /** Back to Halo's starting layout for this screen. */
+    fun resetLayout(mode: LayoutMode) {
+        layout(mode).pages.flatten().filterIsInstance<HomeItem.Hosted>().forEach { widgets.delete(it.appWidgetId) }
+        commit(mode, createDefault(mode))
+    }
+
+    /** Re-renders every icon (after the icon shape or icon pack changed). */
+    fun reloadIcons() {
+        icons.clear()
+        loadApps()
     }
 
     fun isOnHome(mode: LayoutMode, key: String): Boolean = layout(mode).pages.any { p ->

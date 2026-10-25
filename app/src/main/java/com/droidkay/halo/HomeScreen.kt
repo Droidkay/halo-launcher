@@ -140,7 +140,9 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
     val drag = remember(mode) { DragController() }
     // While dragging to the right of the last page, an empty page appears so the item can start a new one.
     val pageCount = layout.pages.size + (if (drag.extraPage) 1 else 0)
-    val pager = rememberPagerState(pageCount = { state.layout(mode).pages.size + (if (drag.extraPage) 1 else 0) + 1 })
+    val pager = rememberPagerState(pageCount = {
+        state.layout(mode).pages.size + (if (drag.extraPage) 1 else 0) + (if (BuildConfig.IS_PAD || HaloSettings.appLibrary) 1 else 0)
+    })
     val onLibrary = pager.currentPage >= pageCount
 
     var spotlight by remember { mutableStateOf(false) }
@@ -150,9 +152,11 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
     // An open folder: a library category name, or a home folder's key ("f:…").
     var folder by remember { mutableStateOf<String?>(null) }
     var folderPicker by remember { mutableStateOf<String?>(null) }
+    var settingsOpen by remember { mutableStateOf(false) }
 
     fun closeOverlays(): Boolean {
-        val any = spotlight || librarySearch || gallery || menu != null || folder != null || folderPicker != null
+        val any = spotlight || librarySearch || gallery || menu != null || folder != null || folderPicker != null || settingsOpen
+        settingsOpen = false
         folderPicker = null
         spotlight = false
         librarySearch = false
@@ -165,6 +169,16 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
     val launch: (AppInfo, Rect?) -> Unit = { app, bounds -> state.launch(app, view, bounds) }
 
     // ---------------------------------------------------------------- drag and drop (iOS style)
+    // Nova-style gestures (Settings → Gestures).
+    fun runGesture(action: String) {
+        when (action) {
+            "spotlight" -> spotlight = true
+            "notifications" -> expandNotifications(context)
+            "library" -> if (BuildConfig.IS_PAD || HaloSettings.appLibrary) scope.launch { pager.animateScrollToPage(pageCount) }
+            "settings" -> settingsOpen = true
+            "edit" -> if (!HaloSettings.lockLayout) state.editMode = true
+        }
+    }
     val pickUp: () -> Unit = {
         menu = null
         state.editMode = true
@@ -297,7 +311,8 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
     }
 
     fun entriesFor(req: MenuRequest): List<MenuEntry> {
-        val edit = MenuEntry("Edit Home Screen", "✎") { state.editMode = true }
+        val edit = if (HaloSettings.lockLayout) MenuEntry("Halo Settings", "⚙") { settingsOpen = true }
+        else MenuEntry("Edit Home Screen", "✎") { state.editMode = true }
         return when (val t = req.target) {
             is MenuTarget.HomeApp -> {
                 val app = state.appMap[t.key]
@@ -374,7 +389,11 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
     // iPhone "Duo" layout (Halo on the Fold): side status rail, and the dock moves to the right
     // edge on the cover screen and when the inner screen is held sideways.
     val duo = !BuildConfig.IS_PAD
-    val sideDock = duo && (mode == LayoutMode.COVER || landscape)
+    val dockOn = BuildConfig.IS_PAD || HaloSettings.dockEnabled
+    val sideDock = duo && dockOn && (
+        (mode == LayoutMode.COVER && HaloSettings.coverSideDock) ||
+            (mode == LayoutMode.INNER && landscape && HaloSettings.landscapeSideDock)
+        )
     WallpaperBlurDriver(blurSupported) {
         val f = if (mode == LayoutMode.COVER) fold.value else 0f
         maxOf(overlayBlur, f) * 100f
@@ -382,6 +401,9 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
 
     CompositionLocalProvider(LocalWallpaperBlur provides blurSupported) {
     Box(Modifier.fillMaxSize()) {
+        if (HaloSettings.wallpaperDim > 0.01f) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = HaloSettings.wallpaperDim)))
+        }
         Column(
             Modifier
                 .fillMaxSize()
@@ -414,6 +436,7 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                     onAdd = { gallery = true },
                     onWallpaper = { openWallpaperPicker(context) },
                     onDone = { state.editMode = false },
+                    onSettings = { settingsOpen = true },
                     onAutoFolders = ({
                         val n = state.addCategoryFolders(mode)
                         Toast.makeText(
@@ -439,7 +462,10 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                         var total = 0f
                         detectVerticalDragGestures(
                             onDragStart = { total = 0f },
-                            onDragEnd = { if (total > 80.dp.toPx()) spotlight = true },
+                            onDragEnd = {
+                                if (total > 80.dp.toPx()) runGesture(HaloSettings.swipeDown)
+                                else if (total < -80.dp.toPx()) runGesture(HaloSettings.swipeUp)
+                            },
                             onVerticalDrag = { change, dy ->
                                 total += dy
                                 change.consume()
@@ -457,9 +483,17 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                 ) { page ->
                     val pages = state.layout(mode).pages
                     if (page < pages.size) {
-                        HomePage(state, mode, page, pages[page], drag, launch, onMenu = { menu = it }, onOpenFolder = { folder = it }, onPickUp = pickUp)
+                        HomePage(
+                            state, mode, page, pages[page], drag, launch,
+                            onMenu = { menu = it }, onOpenFolder = { folder = it }, onPickUp = pickUp,
+                            onGesture = { runGesture(it) },
+                        )
                     } else if (page < pageCount) {
-                        HomePage(state, mode, page, emptyList(), drag, launch, onMenu = { menu = it }, onOpenFolder = { folder = it }, onPickUp = pickUp)
+                        HomePage(
+                            state, mode, page, emptyList(), drag, launch,
+                            onMenu = { menu = it }, onOpenFolder = { folder = it }, onPickUp = pickUp,
+                            onGesture = { runGesture(it) },
+                        )
                     } else {
                         AppLibraryPage(
                             state, mode, launch,
@@ -488,10 +522,10 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                         scrolling = pager.isScrollInProgress,
                         count = pageCount,
                         current = pager.currentPage,
-                        dotsOnly = duo,
+                        dotsOnly = duo && HaloSettings.pageIndicator == "dots",
                         onSearch = { spotlight = true },
                     )
-                    if (!sideDock) Dock(state, mode, drag, launch, onMenu = { menu = it }, onPickUp = pickUp)
+                    if (!sideDock && dockOn) Dock(state, mode, drag, launch, onMenu = { menu = it }, onPickUp = pickUp)
                 }
             }
         }
@@ -576,7 +610,13 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
         ) {
             WidgetGallery(
                 state = state,
+                mode = mode,
                 onDismiss = { gallery = false },
+                onAddApp = { app ->
+                    val target = pager.currentPage.coerceIn(0, pageCount - 1)
+                    state.addToHome(mode, HomeItem.App(app.key), target, prepend = false)
+                    Toast.makeText(context, "Added ${app.label}", Toast.LENGTH_SHORT).show()
+                },
                 onAddBuiltIn = { kind, size ->
                     gallery = false
                     val target = pager.currentPage.coerceIn(0, pageCount - 1)
@@ -596,6 +636,13 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
         menu?.let { req ->
             ContextMenu(req, entriesFor(req), onDismiss = { menu = null })
         }
+        AnimatedVisibility(
+            visible = settingsOpen,
+            enter = fadeIn() + slideInVertically { it / 4 },
+            exit = fadeOut() + slideOutVertically { it / 4 },
+        ) {
+            SettingsScreen(state, mode, onDismiss = { settingsOpen = false })
+        }
     }
     }
 }
@@ -613,25 +660,31 @@ private fun HomePage(
     onMenu: (MenuRequest) -> Unit,
     onOpenFolder: (String) -> Unit,
     onPickUp: () -> Unit,
+    onGesture: (String) -> Unit,
 ) {
     val spec = mode.spec()
     val density = LocalDensity.current
     val haptic = LocalHapticFeedback.current
+    val landscape = LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
 
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
-                detectTapGestures(onLongPress = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    state.editMode = true
-                })
+                detectTapGestures(
+                    onLongPress = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        // Locked layout: long-press opens Settings instead of jiggle mode.
+                        if (HaloSettings.lockLayout) onGesture("settings") else state.editMode = true
+                    },
+                    onDoubleTap = { if (HaloSettings.doubleTap != "none") onGesture(HaloSettings.doubleTap) },
+                )
             }
     ) {
     // Duo inner screen: an iPhone-sized grid centred on the big screen (pushed right in landscape,
     // with extra widgets on the left of page one), instead of stretching icons across it.
-    val duoInner = !BuildConfig.IS_PAD && mode == LayoutMode.INNER
-    val wide = maxWidth > maxHeight
+    val duoInner = !BuildConfig.IS_PAD && mode == LayoutMode.INNER && HaloSettings.innerCentered
+    val wide = landscape
     val rowUnit = maxHeight / spec.rows
     val gridW = if (duoInner) min(maxWidth - 16.dp, rowUnit * spec.cols * 1.04f) else maxWidth - 16.dp
     if (duoInner && wide && pageIndex == 0) {
@@ -670,11 +723,13 @@ private fun HomePage(
             BuildConfig.IS_PAD -> min(min(cellWdp * 0.64f, cellHdp * 0.56f), 74.dp)
             mode == LayoutMode.COVER -> min(min(cellWdp * 0.78f, cellHdp * 0.52f), 62.dp)
             else -> min(min(cellWdp * 0.6f, cellHdp * 0.52f), 64.dp)
+        }.let { base ->
+            if (BuildConfig.IS_PAD) base else min(base * HaloSettings.iconScale, min(cellWdp * 0.94f, cellHdp * 0.8f))
         }
         val labelW = if (BuildConfig.IS_PAD) null else cellWdp - 2.dp
         val widgetUnit = min(cellWdp, cellHdp)
         // iOS shows the widget's name under it.
-        val labelSpace = if (BuildConfig.IS_PAD) 0.dp else 16.dp
+        val labelSpace = if (BuildConfig.IS_PAD || !HaloSettings.widgetLabels) 0.dp else 16.dp
 
         // While something is being dragged, show where it would land (iOS: the others make room).
         val dragKey = drag.key
@@ -719,7 +774,7 @@ private fun HomePage(
                         .homeGestures(
                             key = item.key,
                             editMode = state.editMode,
-                            pickUpWithoutEdit = true,
+                            pickUpWithoutEdit = !HaloSettings.lockLayout,
                             onTap = {
                                 when (item) {
                                     is HomeItem.App -> state.appMap[item.component]?.let { launch(it, iconBounds) }
@@ -855,6 +910,7 @@ private fun HomeItemContent(
                 iconSize = iconSize,
                 edit = edit,
                 labelWidth = labelWidth,
+                showLabel = HaloSettings.showLabels,
                 handleGestures = false,
                 onIconBounds = onIconBounds,
                 onTap = { r -> launch(app, r) },
@@ -1041,7 +1097,7 @@ private fun DockIcons(
                         .homeGestures(
                             key = k,
                             editMode = edit,
-                            pickUpWithoutEdit = true,
+                            pickUpWithoutEdit = !HaloSettings.lockLayout,
                             onTap = { launch(app, iconBounds) },
                             onEditTap = {},
                             onLongPress = { onMenu(MenuRequest(MenuTarget.DockApp(k), iconBounds)) },
@@ -1104,7 +1160,7 @@ private fun Dock(
                 .then(if (mode == LayoutMode.COVER) Modifier.fillMaxWidth() else Modifier)
                 .then(
                     if (BuildConfig.IS_PAD) Modifier.liquidGlass(RoundedCornerShape(34.dp))
-                    else Modifier.clip(RoundedCornerShape(32.dp)).background(Color.White.copy(alpha = 0.22f))
+                    else Modifier.clip(RoundedCornerShape(32.dp)).background(Color.White.copy(alpha = if (HaloSettings.dockBackground) 0.22f else 0f))
                 )
                 .onGloballyPositioned {
                     drag.dockRect = it.boundsInRoot().inflate(grow)
@@ -1168,7 +1224,7 @@ private fun SideRail(
             Column(
                 Modifier
                     .clip(RoundedCornerShape(30.dp))
-                    .background(Color.White.copy(alpha = 0.22f))
+                    .background(Color.White.copy(alpha = if (HaloSettings.dockBackground) 0.22f else 0f))
                     .onGloballyPositioned {
                         drag.dockRect = it.boundsInRoot().inflate(grow)
                         drag.dockVertical = true
@@ -1224,7 +1280,7 @@ private fun SearchOrDots(scrolling: Boolean, count: Int, current: Int, dotsOnly:
 }
 
 @Composable
-private fun EditBar(onAdd: () -> Unit, onWallpaper: () -> Unit, onDone: () -> Unit, onAutoFolders: (() -> Unit)?) {
+private fun EditBar(onAdd: () -> Unit, onWallpaper: () -> Unit, onDone: () -> Unit, onSettings: () -> Unit, onAutoFolders: (() -> Unit)?) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -1240,6 +1296,18 @@ private fun EditBar(onAdd: () -> Unit, onWallpaper: () -> Unit, onDone: () -> Un
             contentAlignment = Alignment.Center,
         ) {
             Text("+", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
+        }
+        Spacer(Modifier.width(8.dp))
+        // Halo Settings
+        Box(
+            Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.28f))
+                .clickable(onClick = onSettings),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("⚙", color = Color.White, fontSize = 18.sp)
         }
         Spacer(Modifier.weight(1f))
         if (onAutoFolders != null) {

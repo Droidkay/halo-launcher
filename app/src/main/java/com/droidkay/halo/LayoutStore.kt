@@ -15,7 +15,8 @@ data class GridSpec(val cols: Int, val rows: Int, val dockSize: Int)
 
 fun LayoutMode.spec(): GridSpec =
     if (BuildConfig.IS_PAD) GridSpec(cols = 8, rows = 5, dockSize = 8)
-    else GridSpec(cols = 4, rows = 6, dockSize = 4)
+    else if (this == LayoutMode.INNER) GridSpec(HaloSettings.innerCols, HaloSettings.innerRows, HaloSettings.dockCount)
+    else GridSpec(HaloSettings.coverCols, HaloSettings.coverRows, HaloSettings.dockCount)
 
 enum class WidgetSize(val w: Int, val h: Int, val title: String) {
     SMALL(2, 2, "Small"),

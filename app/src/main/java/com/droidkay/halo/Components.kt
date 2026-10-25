@@ -98,16 +98,28 @@ val IosGray = Color(0xFF8E8E93)
 
 private val LabelShadow = Shadow(Color.Black.copy(alpha = 0.55f), Offset(0f, 1.5f), 6f)
 
-fun labelStyle(size: TextUnit = 12.sp): TextStyle =
+fun labelStyle(size: TextUnit = 12.sp * HaloSettings.labelScale): TextStyle =
     TextStyle(color = Color.White, fontSize = size, fontWeight = FontWeight.Medium, shadow = LabelShadow)
+
+/** Opens the notification shade (Nova-style gesture). */
+@android.annotation.SuppressLint("WrongConstant")
+fun expandNotifications(context: Context) {
+    runCatching {
+        val sbm = context.getSystemService("statusbar")
+        Class.forName("android.app.StatusBarManager").getMethod("expandNotificationsPanel").invoke(sbm)
+    }
+}
 
 @Composable
 fun AppIconImage(icon: ImageBitmap?, size: Dp, modifier: Modifier = Modifier) {
+    // Icons arrive already cut to the chosen shape (or as the icon pack drew them).
     Box(
         modifier
             .size(size)
-            .clip(SquircleShape)
-            .background(Color.White.copy(alpha = 0.18f))
+            .then(
+                if (icon == null) Modifier.clip(iconShapeFor(HaloSettings.iconShape)).background(Color.White.copy(alpha = 0.18f))
+                else Modifier
+            )
     ) {
         if (icon != null) Image(bitmap = icon, contentDescription = null, modifier = Modifier.fillMaxSize())
     }

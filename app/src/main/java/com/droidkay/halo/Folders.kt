@@ -84,7 +84,7 @@ fun FolderCell(
                     }
                     .then(
                         if (BuildConfig.IS_PAD) Modifier.liquidGlass(SquircleShape, rim = 1.dp)
-                        else Modifier.clip(SquircleShape).background(Color.White.copy(alpha = 0.30f))
+                        else Modifier.clip(iconShapeFor(HaloSettings.iconShape)).background(Color.White.copy(alpha = 0.30f))
                     )
                     .pointerInput(edit, gestures) {
                         // On the home grid, taps and long-presses are handled by the item's drag handler.
@@ -116,15 +116,17 @@ fun FolderCell(
             }
             if (edit) MinusBadge(onRemove, Modifier.align(Alignment.TopStart).offset((-7).dp, (-7).dp))
         }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            folder.name,
-            style = labelStyle(),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.widthIn(max = iconSize + 24.dp),
-        )
+        if (HaloSettings.showLabels) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                folder.name,
+                style = labelStyle(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = iconSize + 24.dp),
+            )
+        }
     }
 }
 

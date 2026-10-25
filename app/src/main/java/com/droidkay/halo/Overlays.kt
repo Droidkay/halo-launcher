@@ -335,12 +335,15 @@ fun ContextMenu(req: MenuRequest, entries: List<MenuEntry>, onDismiss: () -> Uni
 @Composable
 fun WidgetGallery(
     state: LauncherState,
+    mode: LayoutMode,
     onDismiss: () -> Unit,
+    onAddApp: (AppInfo) -> Unit,
     onAddBuiltIn: (WidgetKind, WidgetSize) -> Unit,
     onAddHosted: (AppWidgetProviderInfo, WidgetSize) -> Unit,
 ) {
     val context = LocalContext.current
     val density = context.resources.displayMetrics.density
+    var tab by remember { mutableStateOf("apps") }
     val providers = remember {
         state.widgets.providers()
             .map { it to runCatching { it.loadLabel(context.packageManager) }.getOrNull().orEmpty() }
@@ -368,9 +371,31 @@ fun WidgetGallery(
                     .padding(start = 20.dp, end = 16.dp, top = 18.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Add Widget", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                // Apps | Widgets switch
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color.White.copy(alpha = 0.1f))
+                        .padding(3.dp)
+                ) {
+                    listOf("apps" to "Apps", "widgets" to "Widgets").forEach { (id, title) ->
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (tab == id) Color.White.copy(alpha = 0.22f) else Color.Transparent)
+                                .clickable { tab = id }
+                                .padding(horizontal = 18.dp, vertical = 7.dp)
+                        ) {
+                            Text(title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+                Spacer(Modifier.weight(1f))
                 GlassPill("Done", bold = true, onClick = onDismiss)
             }
+            if (tab == "apps") {
+                AddAppsList(state, mode, onAddApp)
+            } else
             LazyColumn(contentPadding = PaddingValues(bottom = 40.dp)) {
                 WidgetKind.values().forEach { kind ->
                     item(key = "kind_${kind.name}") {
@@ -462,6 +487,71 @@ fun WidgetGallery(
                     }
                 }
                 item { Spacer(Modifier.height(20.dp)) }
+            }
+        }
+    }
+}
+
+
+/** "+" sheet, Apps tab: every installed app with a button to put it on the current home page. */
+@Composable
+private fun AddAppsList(state: LauncherState, mode: LayoutMode, onAddApp: (AppInfo) -> Unit) {
+    var query by remember { mutableStateOf("") }
+    val apps = state.apps.filter { query.isBlank() || it.label.contains(query.trim(), ignoreCase = true) }
+    Column(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.White.copy(alpha = 0.1f))
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            if (query.isEmpty()) Text("Search apps", color = IosGray, fontSize = 16.sp)
+            BasicTextField(
+                value = query,
+                onValueChange = { query = it },
+                singleLine = true,
+                textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
+                cursorBrush = SolidColor(IosBlue),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        LazyColumn(contentPadding = PaddingValues(bottom = 40.dp)) {
+            items(apps, key = { it.key }) { app ->
+                val onHome = state.isOnHome(mode, app.key) || app.key in state.layout(mode).dock
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !onHome) { onAddApp(app) }
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    AppIconImage(state.icons[app.key], 42.dp)
+                    Text(
+                        app.label,
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 14.dp),
+                    )
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(if (onHome) Color.White.copy(alpha = 0.1f) else IosBlue)
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            if (onHome) "On Home" else "Add",
+                            color = if (onHome) IosGray else Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
             }
         }
     }
