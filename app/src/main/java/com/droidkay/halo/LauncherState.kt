@@ -522,10 +522,10 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
         }
 
         // Inner screen (iPhone Duo): Google + Weather on top. Cover screen: classic Halo widgets.
-        val first = if (mode == LayoutMode.INNER) mutableListOf<HomeItem>(
+        val first: MutableList<HomeItem> = if (mode == LayoutMode.INNER) mutableListOf<HomeItem>(
             HomeItem.BuiltIn(1L, WidgetKind.GOOGLE, WidgetSize.SMALL),
             HomeItem.BuiltIn(2L, WidgetKind.WEATHER, WidgetSize.SMALL),
-        ) else mutableListOf(
+        ) else mutableListOf<HomeItem>(
             HomeItem.BuiltIn(1L, WidgetKind.CLOCK, WidgetSize.MEDIUM),
             HomeItem.BuiltIn(2L, WidgetKind.CALENDAR, WidgetSize.SMALL),
             HomeItem.BuiltIn(3L, WidgetKind.BATTERY, WidgetSize.SMALL),
