@@ -55,7 +55,7 @@ fun AppLibraryPage(
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 10.dp)
                 .then(
-                    if (BuildConfig.IS_PAD) Modifier.liquidGlass(RoundedCornerShape(50))
+                    if (HaloSettings.liquidGlass) Modifier.liquidGlass(RoundedCornerShape(50))
                     else Modifier.clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.2f))
                 )
                 .clickable(onClick = onSearch)
@@ -96,7 +96,7 @@ private fun CategoryTile(
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .then(
-                    if (BuildConfig.IS_PAD) Modifier.liquidGlass(RoundedCornerShape(28.dp))
+                    if (HaloSettings.liquidGlass) Modifier.liquidGlass(RoundedCornerShape(28.dp))
                     else Modifier.clip(RoundedCornerShape(24.dp)).background(Color.White.copy(alpha = 0.16f))
                 )
                 .padding(12.dp),

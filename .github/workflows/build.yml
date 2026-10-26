@@ -26,7 +26,7 @@ jobs:
       - name: Build APKs
         run: |
           set -o pipefail
-          gradle assembleFoldRelease assemblePadRelease assembleDuoRelease --stacktrace 2>&1 | tee build.log
+          gradle :app:assembleRelease --stacktrace 2>&1 | tee build.log
       - name: Report compile errors
         if: failure()
         run: |
@@ -34,9 +34,7 @@ jobs:
 
       - name: Name APKs
         run: |
-          cp app/build/outputs/apk/fold/release/app-fold-release.apk Halo-${{ github.run_number }}.apk
-          cp app/build/outputs/apk/pad/release/app-pad-release.apk Halo-Pad-${{ github.run_number }}.apk
-          cp app/build/outputs/apk/duo/release/app-duo-release.apk Halo-Duo-${{ github.run_number }}.apk
+          cp app/build/outputs/apk/release/app-release.apk Halo-${{ github.run_number }}.apk
 
       - uses: actions/upload-artifact@v4
         with:

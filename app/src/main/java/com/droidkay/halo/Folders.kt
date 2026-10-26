@@ -83,7 +83,7 @@ fun FolderCell(
                         onBounds?.invoke(bounds)
                     }
                     .then(
-                        if (BuildConfig.IS_PAD) Modifier.liquidGlass(SquircleShape, rim = 1.dp)
+                        if (HaloSettings.liquidGlass) Modifier.liquidGlass(SquircleShape, rim = 1.dp)
                         else Modifier.clip(iconShapeFor(HaloSettings.iconShape)).background(Color.White.copy(alpha = 0.30f))
                     )
                     .pointerInput(edit, gestures) {
@@ -145,7 +145,7 @@ fun FolderPanel(
     appMenu: (AppInfo, Rect) -> Unit,
     onRename: ((String) -> Unit)?,
 ) {
-    val cols = if (BuildConfig.IS_PAD) 5 else if (mode == LayoutMode.INNER) 6 else 4
+    val cols = if (mode == LayoutMode.INNER) 5 else 4
     val focus = LocalFocusManager.current
     var name by remember(title) { mutableStateOf(title) }
     var editing by remember { mutableStateOf(false) }
@@ -206,7 +206,7 @@ fun FolderPanel(
                 modifier = Modifier
                     .heightIn(max = 600.dp)
                     .then(
-                        if (BuildConfig.IS_PAD) Modifier.liquidGlass(RoundedCornerShape(40.dp))
+                        if (HaloSettings.liquidGlass) Modifier.liquidGlass(RoundedCornerShape(40.dp))
                         else Modifier.clip(RoundedCornerShape(40.dp))
                             .background(Color.White.copy(alpha = if (LocalWallpaperBlur.current) 0.22f else 0.14f))
                     )
@@ -217,7 +217,7 @@ fun FolderPanel(
                 items(list, key = { it.key }) { app ->
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         TappableIcon(
-                            state.icons[app.key], if (BuildConfig.IS_PAD) 66.dp else 56.dp,
+                            state.icons[app.key], if (mode == LayoutMode.INNER) 64.dp else 56.dp,
                             onTap = { r ->
                                 commit()
                                 onDismiss()

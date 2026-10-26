@@ -5,10 +5,6 @@ name: UI check (emulator)
 # pre-release named ui-check-N. Start it from the Actions tab or with `gh workflow run`.
 on:
   workflow_dispatch:
-    inputs:
-      flavor:
-        description: "fold (Halo) or duo (Halo Duo)"
-        default: fold
 
 permissions:
   contents: write
@@ -32,8 +28,7 @@ jobs:
       - name: Build Halo
         run: |
           set -o pipefail
-          F=${{ inputs.flavor || 'fold' }}
-          gradle assemble${F^}Release --stacktrace 2>&1 | tee build.log
+          gradle :app:assembleRelease --stacktrace 2>&1 | tee build.log
       - name: Report compile errors
         if: failure()
         run: |
@@ -53,7 +48,7 @@ jobs:
           arch: x86_64
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -skin 1812x2176
-          script: FLAVOR=${{ inputs.flavor || 'fold' }} bash .github/ui/check.sh
+          script: bash .github/ui/check.sh
 
       - name: Publish screenshots
         if: always()

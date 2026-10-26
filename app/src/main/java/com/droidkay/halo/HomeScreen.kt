@@ -122,10 +122,10 @@ fun HaloApp(state: LauncherState) {
     MaterialTheme(colorScheme = darkColorScheme()) {
         val config = LocalConfiguration.current
         val smallest = minOf(config.screenWidthDp, config.screenHeightDp)
-        // Fold 5: cover screen ≈ 340–410dp wide, inner screen ≈ 670dp+.
-        // Halo Pad always uses the iPadOS layout.
-        val mode = if (BuildConfig.IS_PAD || smallest >= 500) LayoutMode.INNER else LayoutMode.COVER
-        FoldMorphHost(mode, enabled = !BuildConfig.IS_PAD) {
+        // Phone layout on phones and the Fold's cover screen (≈ 340–430dp); tablet layout on
+        // tablets and the Fold's inner screen (≈ 670dp+). Folding swaps between the two.
+        val mode = if (smallest >= 560) LayoutMode.INNER else LayoutMode.COVER
+        FoldMorphHost(mode) {
             key(mode) { HomeRoot(state, mode) }
         }
     }
@@ -141,7 +141,7 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
     // While dragging to the right of the last page, an empty page appears so the item can start a new one.
     val pageCount = layout.pages.size + (if (drag.extraPage) 1 else 0)
     val pager = rememberPagerState(pageCount = {
-        state.layout(mode).pages.size + (if (drag.extraPage) 1 else 0) + (if (BuildConfig.IS_PAD || HaloSettings.appLibrary) 1 else 0)
+        state.layout(mode).pages.size + (if (drag.extraPage) 1 else 0) + (if (HaloSettings.appLibrary) 1 else 0)
     })
     val onLibrary = pager.currentPage >= pageCount
 
@@ -174,7 +174,7 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
         when (action) {
             "spotlight" -> spotlight = true
             "notifications" -> expandNotifications(context)
-            "library" -> if (BuildConfig.IS_PAD || HaloSettings.appLibrary) scope.launch { pager.animateScrollToPage(pageCount) }
+            "library" -> if (HaloSettings.appLibrary) scope.launch { pager.animateScrollToPage(pageCount) }
             "settings" -> settingsOpen = true
             "edit" -> if (!HaloSettings.lockLayout) state.editMode = true
         }
@@ -405,17 +405,18 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
     // Fold transition (Apple "Duo" style):
     //  - cover screen: the whole screen frosts as the hinge starts to open (and clears as it closes)
     //  - inner screen: only the half that's still swinging is frosted, sharpening as it lands flat
-    val fold = rememberFoldAmount(mode, enabled = !BuildConfig.IS_PAD)
+    val fold = rememberFoldAmount(mode)
     val halfBlur = remember { HalfPanelBlur() }
     val landscape = LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
-    // iPhone "Duo" layout (Halo on the Fold): side status rail, and the dock moves to the right
-    // edge on the cover screen and when the inner screen is held sideways.
-    val duo = !BuildConfig.IS_PAD
-    val dockOn = BuildConfig.IS_PAD || HaloSettings.dockEnabled
-    val sideDock = duo && dockOn && (
-        (mode == LayoutMode.COVER && HaloSettings.coverSideDock) ||
-            (mode == LayoutMode.INNER && landscape && HaloSettings.landscapeSideDock)
-        )
+    // Dock: along the bottom, except a phone held sideways (too short) where it moves to the right edge.
+    val dockOn = HaloSettings.dockEnabled
+    val sideDock = dockOn && mode == LayoutMode.COVER && landscape
+    // Page indicator: iPhone shows the Search pill, iPad shows dots (or whatever Settings says).
+    val dotsOnly = when (HaloSettings.pageIndicator) {
+        "dots" -> true
+        "search" -> false
+        else -> mode == LayoutMode.INNER
+    }
     WallpaperBlurDriver(blurSupported) {
         val f = if (mode == LayoutMode.COVER) fold.value else 0f
         maxOf(overlayBlur, f) * 100f
@@ -538,8 +539,7 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                         scrolling = pager.isScrollInProgress,
                         count = pageCount,
                         current = pager.currentPage,
-                        // Cover screen keeps classic Halo's Search pill; the inner screen follows Settings.
-                        dotsOnly = duo && mode == LayoutMode.INNER && HaloSettings.pageIndicator == "dots",
+                        dotsOnly = dotsOnly,
                         onSearch = { spotlight = true },
                     )
                     if (!sideDock && dockOn) Dock(state, mode, drag, launch, onMenu = { menu = it }, onPickUp = pickUp)
@@ -679,10 +679,10 @@ private fun HomePage(
     onPickUp: () -> Unit,
     onGesture: (String) -> Unit,
 ) {
-    val spec = mode.spec()
+    val landscape = LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
+    val spec = mode.spec(landscape)
     val density = LocalDensity.current
     val haptic = LocalHapticFeedback.current
-    val landscape = LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
 
     BoxWithConstraints(
         Modifier
@@ -698,28 +698,14 @@ private fun HomePage(
                 )
             }
     ) {
-    // Duo inner screen: an iPhone-sized grid centred on the big screen (pushed right in landscape,
-    // with extra widgets on the left of page one), instead of stretching icons across it.
-    val duoInner = !BuildConfig.IS_PAD && mode == LayoutMode.INNER && HaloSettings.innerCentered
-    val wide = landscape
-    val rowUnit = maxHeight / spec.rows
-    val gridW = if (duoInner) min(maxWidth - 16.dp, rowUnit * spec.cols * 1.04f) else maxWidth - 16.dp
-    if (duoInner && wide && pageIndex == 0) {
-        SideWidgets(
-            Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 16.dp)
-                .width(maxWidth - gridW - 40.dp)
-                .fillMaxHeight(),
-            unit = rowUnit,
-            edit = state.editMode,
-        )
-    }
+    // Responsive grid: the portrait grid turns sideways in landscape (5×6 → 6×5), and cells are
+    // capped in width so icons don't drift apart on wide screens (tablet / Fold inner in landscape).
+    val maxCellW = if (mode == LayoutMode.COVER) 124.dp else 172.dp
+    val gridW = min(maxWidth - 16.dp, maxCellW * spec.cols)
     DisposableEffect(pageIndex) { onDispose { drag.grids.remove(pageIndex) } }
     BoxWithConstraints(
         Modifier
-            .align(if (duoInner && wide) Alignment.TopEnd else Alignment.TopCenter)
-            .padding(end = if (duoInner && wide) 8.dp else 0.dp)
+            .align(Alignment.TopCenter)
             .width(gridW)
             .fillMaxHeight()
             .onGloballyPositioned { c ->
@@ -736,18 +722,14 @@ private fun HomePage(
         val cellHdp = maxHeight / spec.rows
         val cellW = with(density) { cellWdp.toPx() }
         val cellH = with(density) { cellHdp.toPx() }
-        val iconSize = when {
-            // Halo Pad and the cover screen: classic Halo sizing.
-            BuildConfig.IS_PAD || mode == LayoutMode.COVER -> min(min(cellWdp * 0.64f, cellHdp * 0.56f), 74.dp)
-            mode == LayoutMode.COVER -> min(min(cellWdp * 0.78f, cellHdp * 0.52f), 62.dp)
-            else -> min(min(cellWdp * 0.6f, cellHdp * 0.52f), 64.dp)
-        }.let { base ->
-            if (BuildConfig.IS_PAD) base else min(base * HaloSettings.iconScale, min(cellWdp * 0.94f, cellHdp * 0.8f))
+        val iconSize = run {
+            val base = min(min(cellWdp * 0.62f, cellHdp * 0.56f), if (mode == LayoutMode.COVER) 64.dp else 76.dp)
+            min(base * HaloSettings.iconScale, min(cellWdp * 0.94f, cellHdp * 0.8f))
         }
-        val labelW = if (BuildConfig.IS_PAD || mode == LayoutMode.COVER) null else cellWdp - 2.dp
+        val labelW = cellWdp - 4.dp
         val widgetUnit = min(cellWdp, cellHdp)
-        // iOS shows the widget's name under it.
-        val labelSpace = if (BuildConfig.IS_PAD || mode == LayoutMode.COVER || !HaloSettings.widgetLabels) 0.dp else 16.dp
+        // Widget names (iOS style) on the tablet layout; the phone layout keeps classic Halo.
+        val labelSpace = if (mode == LayoutMode.COVER || !HaloSettings.widgetLabels) 0.dp else 16.dp
 
         // While something is being dragged, show where it would land (iOS: the others make room).
         val dragKey = drag.key
@@ -878,30 +860,6 @@ private fun DragGhost(state: LauncherState, drag: DragController) {
     }
 }
 
-/** Landscape inner screen, page one: the iPhone Duo's extra widgets to the left of the app grid. */
-@Composable
-private fun SideWidgets(modifier: Modifier, unit: Dp, edit: Boolean) {
-    val context = LocalContext.current
-    BoxWithConstraints(modifier) {
-        val side = min(unit * 2 - 28.dp, (maxWidth - 14.dp) / 2)
-        if (side < 90.dp) return@BoxWithConstraints
-        Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            listOf(WidgetKind.CALENDAR, WidgetKind.BATTERY).forEach { kind ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        Modifier
-                            .size(side)
-                            .clip(RoundedCornerShape(22.dp))
-                            .clickable(enabled = !edit) { openBuiltInWidget(context, kind) }
-                    ) {
-                        BuiltInWidget(kind, WidgetSize.SMALL)
-                    }
-                    Text(kind.title, style = labelStyle(11.sp), modifier = Modifier.padding(top = 4.dp))
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun HomeItemContent(
@@ -1161,10 +1119,10 @@ private fun Dock(
     onPickUp: () -> Unit,
 ) {
     val layout = state.layout(mode)
-    val recentExtras = if (BuildConfig.IS_PAD) {
-        // Pad in portrait: 8 dock apps already fill the width, so recents only show in landscape.
+    // Tablet layout: iPad-style recent apps after a divider (3 in landscape, 2 in portrait).
+    val recentExtras = if (mode == LayoutMode.INNER && HaloSettings.dockRecents) {
         val portrait = LocalConfiguration.current.let { it.screenHeightDp > it.screenWidthDp }
-        state.recents.filter { it !in layout.dock }.mapNotNull { state.appMap[it] }.take(if (portrait) 0 else 3)
+        state.recents.filter { it !in layout.dock }.mapNotNull { state.appMap[it] }.take(if (portrait) 2 else 3)
     } else emptyList()
     val iconSize = if (mode == LayoutMode.INNER) 60.dp else 56.dp
     val edit = state.editMode
@@ -1180,7 +1138,7 @@ private fun Dock(
             Modifier
                 .then(if (mode == LayoutMode.COVER) Modifier.fillMaxWidth() else Modifier)
                 .then(
-                    if (BuildConfig.IS_PAD) Modifier.liquidGlass(RoundedCornerShape(34.dp))
+                    if (HaloSettings.liquidGlass) Modifier.liquidGlass(RoundedCornerShape(34.dp))
                     else Modifier.clip(RoundedCornerShape(32.dp)).background(Color.White.copy(alpha = if (HaloSettings.dockBackground) 0.22f else 0f))
                 )
                 .onGloballyPositioned {
@@ -1270,7 +1228,7 @@ private fun SearchOrDots(scrolling: Boolean, count: Int, current: Int, dotsOnly:
         contentAlignment = Alignment.Center,
     ) {
         // iPadOS shows page dots only; the phone keeps the iOS Search pill.
-        Crossfade(targetState = scrolling || BuildConfig.IS_PAD || dotsOnly, label = "pill") { isScrolling ->
+        Crossfade(targetState = scrolling || dotsOnly, label = "pill") { isScrolling ->
             if (isScrolling) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     for (i in 0 until count) {

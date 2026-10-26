@@ -83,23 +83,44 @@ import java.time.format.TextStyle as JTextStyle
 
 private data class WidgetColors(val card: Color, val text: Color, val secondary: Color, val face: Color)
 
+/** Widgets follow Settings → Look: light / dark / auto (phone's dark mode). */
 @Composable
-private fun widgetColors(): WidgetColors =
-    // Halo Pad: always dark glass widgets, iPadOS 26 style.
-    if (BuildConfig.IS_PAD) WidgetColors(Color.Transparent, Color.White, Color(0xFF9A9AA0), Color.White.copy(alpha = 0.07f))
-    else if (isSystemInDarkTheme()) WidgetColors(Color(0xFF1C1C1E), Color.White, IosGray, Color(0xFF2C2C2E))
-    else WidgetColors(Color.White, Color.Black, IosGray, Color(0xFFF2F2F7))
+fun widgetDark(): Boolean = when (HaloSettings.widgetTheme) {
+    "light" -> false
+    "dark" -> true
+    else -> isSystemInDarkTheme()
+}
+
+/** The widget's card: Liquid Glass (dark smoke or bright frost) or a plain iOS card. */
+@Composable
+fun Modifier.widgetSurface(shape: androidx.compose.ui.graphics.Shape): Modifier {
+    val dark = widgetDark()
+    return when {
+        HaloSettings.liquidGlass && dark -> this.liquidGlass(shape, dark = true)
+        HaloSettings.liquidGlass -> this.clip(shape).background(Color.White.copy(alpha = 0.72f)).liquidGlass(shape)
+        dark -> this.clip(shape).background(Color(0xFF1C1C1E))
+        else -> this.clip(shape).background(Color.White)
+    }
+}
+
+@Composable
+private fun widgetColors(): WidgetColors {
+    val dark = widgetDark()
+    return when {
+        HaloSettings.liquidGlass && dark -> WidgetColors(Color.Transparent, Color.White, Color(0xFF9A9AA0), Color.White.copy(alpha = 0.07f))
+        HaloSettings.liquidGlass -> WidgetColors(Color.Transparent, Color.Black, Color(0xFF6C6C70), Color.Black.copy(alpha = 0.05f))
+        dark -> WidgetColors(Color(0xFF1C1C1E), Color.White, IosGray, Color(0xFF2C2C2E))
+        else -> WidgetColors(Color.White, Color.Black, IosGray, Color(0xFFF2F2F7))
+    }
+}
 
 @Composable
 private fun WidgetCard(content: @Composable () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
-            .then(
-                if (BuildConfig.IS_PAD) Modifier.liquidGlass(RoundedCornerShape(26.dp), dark = true)
-                else Modifier.clip(RoundedCornerShape(22.dp)).background(widgetColors().card)
-            )
-            .padding(if (BuildConfig.IS_PAD) 16.dp else 14.dp)
+            .widgetSurface(RoundedCornerShape(24.dp))
+            .padding(15.dp)
     ) { content() }
 }
 
@@ -185,10 +206,7 @@ private fun ClockWidget(size: WidgetSize) {
         Box(
             Modifier
                 .fillMaxSize()
-                .then(
-                    if (BuildConfig.IS_PAD) Modifier.liquidGlass(RoundedCornerShape(26.dp), dark = true)
-                    else Modifier.clip(RoundedCornerShape(22.dp)).background(colors.card)
-                )
+                .widgetSurface(RoundedCornerShape(24.dp))
                 .padding(10.dp),
             contentAlignment = Alignment.Center,
         ) {

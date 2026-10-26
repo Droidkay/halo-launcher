@@ -209,7 +209,7 @@ fun GlassPill(text: String, bold: Boolean = false, onClick: () -> Unit) {
     Box(
         Modifier
             .then(
-                if (BuildConfig.IS_PAD) Modifier.liquidGlass(RoundedCornerShape(50))
+                if (HaloSettings.liquidGlass) Modifier.liquidGlass(RoundedCornerShape(50))
                 else Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.28f))
             )
             .clickable(onClick = onClick)

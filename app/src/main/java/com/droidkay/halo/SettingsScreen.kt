@@ -88,36 +88,41 @@ fun SettingsScreen(state: LauncherState, current: LayoutMode, onDismiss: () -> U
                 // ------------------------------------------------ home screen
                 Section("HOME SCREEN") {
                     Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Screen", color = Color.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                        Column(Modifier.weight(1f)) {
+                            Text("Layout", color = Color.White, fontSize = 16.sp)
+                            Text(
+                                if (screen == LayoutMode.COVER) "Phones and the Fold's cover screen" else "Tablets and the Fold's inner screen",
+                                color = IosGray,
+                                fontSize = 13.sp,
+                            )
+                        }
                         Segmented(
-                            listOf(LayoutMode.COVER to "Cover", LayoutMode.INNER to "Inner"),
+                            listOf(LayoutMode.COVER to "Phone", LayoutMode.INNER to "Tablet"),
                             screen,
                         ) { screen = it }
                     }
                     Line()
                     val cols = if (screen == LayoutMode.COVER) HaloSettings.coverCols else HaloSettings.innerCols
                     val rows = if (screen == LayoutMode.COVER) HaloSettings.coverRows else HaloSettings.innerRows
+                    Text(
+                        "Portrait grid. In landscape it turns sideways (${cols}×${rows} becomes ${rows}×${cols}), so your pages stay the same.",
+                        color = IosGray,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
                     Stepper("Columns", cols, 3..(if (screen == LayoutMode.COVER) 6 else 8)) {
                         HaloSettings.setGrid(screen, it, rows)
                         state.reflow(screen)
                     }
                     Line()
-                    Stepper("Rows", rows, 4..9) {
+                    Stepper("Rows", rows, 4..(if (screen == LayoutMode.COVER) 8 else 9)) {
                         HaloSettings.setGrid(screen, cols, it)
                         state.reflow(screen)
                     }
-                    if (screen == LayoutMode.INNER) {
-                        Line()
-                        Toggle(
-                            "iPhone-style grid",
-                            "Keeps the grid phone-sized in the middle of the inner screen. Off spreads it across the screen.",
-                            HaloSettings.innerCentered,
-                        ) { HaloSettings.updateInnerCentered(it) }
-                    }
                     Line()
                     Choice(
-                        "Page indicator (inner screen)",
-                        listOf("dots" to "Dots", "search" to "Search pill"),
+                        "Page indicator",
+                        listOf("auto" to "Auto", "dots" to "Dots", "search" to "Search pill"),
                         HaloSettings.pageIndicator,
                     ) { HaloSettings.updatePageIndicator(it) }
                     Line()
@@ -128,6 +133,21 @@ fun SettingsScreen(state: LauncherState, current: LayoutMode, onDismiss: () -> U
                     SliderRow("Wallpaper dim", HaloSettings.wallpaperDim, 0f..0.6f, "${(HaloSettings.wallpaperDim * 100).roundToInt()}%") {
                         HaloSettings.updateWallpaperDim(it)
                     }
+                }
+
+                // ------------------------------------------------ look
+                Section("LOOK") {
+                    Toggle(
+                        "Liquid Glass",
+                        "iOS 26 glass for the dock, folders, widgets and buttons. Off uses the classic frosted look.",
+                        HaloSettings.liquidGlass,
+                    ) { HaloSettings.updateLiquidGlass(it) }
+                    Line()
+                    Choice(
+                        "Widgets",
+                        listOf("auto" to "Match phone", "light" to "Light", "dark" to "Dark"),
+                        HaloSettings.widgetTheme,
+                    ) { HaloSettings.updateWidgetTheme(it) }
                 }
 
                 // ------------------------------------------------ icons
@@ -199,28 +219,30 @@ fun SettingsScreen(state: LauncherState, current: LayoutMode, onDismiss: () -> U
                     Toggle("Show dock", null, HaloSettings.dockEnabled) { HaloSettings.updateDockEnabled(it) }
                     if (HaloSettings.dockEnabled) {
                         Line()
-                        Stepper("Dock apps", HaloSettings.dockCount, 3..7) {
-                            HaloSettings.updateDockCount(it)
-                            state.reflowAll()
+                        Stepper(
+                            if (screen == LayoutMode.COVER) "Dock apps (phone)" else "Dock apps (tablet)",
+                            HaloSettings.dockSize(screen),
+                            if (screen == LayoutMode.COVER) 3..6 else 4..10,
+                        ) {
+                            HaloSettings.updateDockSize(screen, it)
+                            state.reflow(screen)
+                        }
+                        if (screen == LayoutMode.INNER) {
+                            Line()
+                            Toggle("Recent apps in dock", "iPad style: your last apps after a divider.", HaloSettings.dockRecents) {
+                                HaloSettings.updateDockRecents(it)
+                            }
                         }
                         Line()
                         Toggle("Dock background", "The frosted pill behind the dock icons.", HaloSettings.dockBackground) {
                             HaloSettings.updateDockBackground(it)
-                        }
-                        Line()
-                        Toggle("Side dock on cover screen", "iPhone Duo style: dock down the right edge.", HaloSettings.coverSideDock) {
-                            HaloSettings.updateCoverSideDock(it)
-                        }
-                        Line()
-                        Toggle("Side dock in landscape", "Inner screen held sideways.", HaloSettings.landscapeSideDock) {
-                            HaloSettings.updateLandscapeSideDock(it)
                         }
                     }
                 }
 
                 // ------------------------------------------------ gestures
                 val actions = listOf("spotlight" to "Search", "notifications" to "Notifications", "library" to "App Library", "none" to "Nothing")
-                if (!BuildConfig.IS_DUO) Section("GESTURES") {
+                Section("GESTURES") {
                     Choice("Swipe down", actions, HaloSettings.swipeDown) { HaloSettings.updateSwipeDown(it) }
                     Line()
                     Choice("Swipe up", actions, HaloSettings.swipeUp) { HaloSettings.updateSwipeUp(it) }
@@ -242,7 +264,7 @@ fun SettingsScreen(state: LauncherState, current: LayoutMode, onDismiss: () -> U
                         HaloSettings.updateLockLayout(it)
                         if (it) state.editMode = false
                     }
-                    if (!BuildConfig.IS_PAD) {
+                    run {
                         Line()
                         Row(
                             Modifier

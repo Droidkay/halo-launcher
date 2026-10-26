@@ -3,10 +3,8 @@
 set -x
 OUT=ui-out
 mkdir -p $OUT
-FLAVOR=${FLAVOR:-fold}
-APK=app/build/outputs/apk/$FLAVOR/release/app-$FLAVOR-release.apk
+APK=app/build/outputs/apk/release/app-release.apk
 PKG=com.droidkay.halo
-[ "$FLAVOR" = "duo" ] && PKG=com.droidkay.haloduo
 adb wait-for-device
 adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 1; done'
 adb install -r -g $APK
@@ -107,9 +105,30 @@ shot 06-inner-final
 adb shell settings put system user_rotation 1
 sleep 5
 shot 07-inner-landscape
+dump 07-inner-landscape
+W=2176; H=1812
+for name in YouTube Gmail Maps Photos Calendar Clock Drive Files; do
+  if P=$(find 07-inner-landscape "$name"); then
+    read cx cy x1 y1 x2 y2 <<< "$P"
+    drag $cx $((y1 - 60)) $((W - 120)) $((H / 3)) 1.2 07b-landscape-drag-edge $((W - 120)) $((H / 3))
+    break
+  fi
+done
+adb shell input keyevent KEYCODE_BACK; home; sleep 2
 
-# ---------------------------------------------------------------- cover screen
+# ---------------------------------------------------------------- tablet (Redmi Pad 2 size: 800x1280dp)
 adb shell settings put system user_rotation 0
+adb shell wm size 1360x2176
+adb shell wm density 272
+sleep 5; home; sleep 3
+shot 10-tablet-portrait
+adb shell settings put system user_rotation 1
+sleep 5
+shot 11-tablet-landscape
+adb shell settings put system user_rotation 0
+sleep 2
+
+# ---------------------------------------------------------------- cover screen / phone
 adb shell wm size 904x2176
 adb shell wm density 420
 sleep 5
@@ -124,6 +143,12 @@ for name in Clock Camera Contacts Files Calendar Maps Photos YouTube Chrome Sett
     break
   fi
 done
+adb shell input keyevent KEYCODE_BACK; home; sleep 1
+# phone held sideways: dock moves to the right edge
+adb shell settings put system user_rotation 1
+sleep 5
+shot 12-phone-landscape
+adb shell settings put system user_rotation 0
 
 adb logcat -d -s HaloLayout AndroidRuntime > $OUT/99-log.txt
 adb logcat -d | grep -iE "halo|FATAL" | tail -300 > $OUT/99-logcat-halo.txt

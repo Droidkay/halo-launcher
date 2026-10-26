@@ -7,16 +7,19 @@ import org.json.JSONObject
 enum class LayoutMode { COVER, INNER }
 
 /**
- * Grid size per screen. Halo (Fold) uses the iPhone "Duo" layout on both screens: a compact
- * 4-column iPhone grid with a 4-app dock (on the right edge on the cover and in landscape).
- * Halo Pad keeps the iPadOS grid.
+ * Grid size of a layout: [LayoutMode.COVER] is the phone layout (phones, the Fold's cover screen),
+ * [LayoutMode.INNER] the tablet layout (tablets, the Fold's inner screen).
  */
-data class GridSpec(val cols: Int, val rows: Int, val dockSize: Int)
+data class GridSpec(val cols: Int, val rows: Int, val dockSize: Int) {
+    /** Landscape: the same grid turned sideways, so a page holds the same apps either way. */
+    fun transposed() = copy(cols = rows, rows = cols)
+}
 
+/** The portrait grid for this layout (phone or tablet); see [GridSpec.transposed] for landscape. */
 fun LayoutMode.spec(): GridSpec =
-    if (BuildConfig.IS_PAD) GridSpec(cols = 8, rows = 5, dockSize = 8)
-    else if (this == LayoutMode.INNER) GridSpec(HaloSettings.innerCols, HaloSettings.innerRows, HaloSettings.dockCount)
-    else GridSpec(HaloSettings.coverCols, HaloSettings.coverRows, HaloSettings.dockCount)
+    GridSpec(HaloSettings.cols(this), HaloSettings.rows(this), HaloSettings.dockSize(this))
+
+fun LayoutMode.spec(landscape: Boolean): GridSpec = spec().let { if (landscape) it.transposed() else it }
 
 enum class WidgetSize(val w: Int, val h: Int, val title: String) {
     SMALL(2, 2, "Small"),
@@ -126,7 +129,10 @@ fun pack(items: List<HomeItem>, cols: Int, rows: Int): Pair<List<Placed>, List<H
     return placed to overflow
 }
 
-fun fits(items: List<HomeItem>, spec: GridSpec): Boolean = pack(items, spec.cols, spec.rows).second.isEmpty()
+/** True when the page fits in both portrait and landscape, so nothing disappears when you rotate. */
+fun fits(items: List<HomeItem>, spec: GridSpec): Boolean =
+    pack(items, spec.cols, spec.rows).second.isEmpty() &&
+        (spec.cols == spec.rows || pack(items, spec.rows, spec.cols).second.isEmpty())
 
 class LayoutStore(context: Context) {
     private val prefs = context.getSharedPreferences("halo_layout", Context.MODE_PRIVATE)

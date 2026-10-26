@@ -70,16 +70,14 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
 
     init {
         // Halo Pad v2 layout (no category-folder page, iPadOS grid): start fresh once.
-        val resetPad = BuildConfig.IS_PAD && store.layoutVersion() < PAD_LAYOUT_VERSION
-        if (!resetPad) LayoutMode.values().forEach { m -> store.load(m)?.let { layouts[m] = it } }
-        if (resetPad) store.setLayoutVersion(PAD_LAYOUT_VERSION)
+        LayoutMode.values().forEach { m -> store.load(m)?.let { layouts[m] = it } }
         // Halo (Fold) moved to the iPhone "Duo" layout: re-flow saved screens into the 4-column grid once.
-        if (!BuildConfig.IS_PAD && store.duoVersion() < DUO_LAYOUT_VERSION) {
+        if (store.duoVersion() < DUO_LAYOUT_VERSION) {
             LayoutMode.values().forEach { m -> layouts[m]?.let { commit(m, migrateToDuo(m, it)) } }
             store.setDuoVersion(DUO_LAYOUT_VERSION)
         }
         // Cover screen went back to classic Halo: take off the Google/Weather widgets the Duo update added there.
-        if (!BuildConfig.IS_PAD && !store.coverClassic()) {
+        if (!store.coverClassic()) {
             layouts[LayoutMode.COVER]?.let { l ->
                 val first = l.pages.firstOrNull().orEmpty()
                 val cleaned = first.filterIndexed { i, it ->
@@ -90,7 +88,7 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
             store.setCoverClassic()
         }
         // Grid / dock sizes come from Settings and may have changed since the layout was saved.
-        if (!BuildConfig.IS_PAD) reflowAll()
+        reflowAll()
         launcherApps.registerCallback(callback, Handler(Looper.getMainLooper()))
         loadApps()
     }
@@ -225,11 +223,12 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
         val out = pages.map { it.toMutableList() }.toMutableList()
         var i = 0
         while (i < out.size) {
-            val (_, overflow) = pack(out[i], spec.cols, spec.rows)
-            if (overflow.isNotEmpty()) {
-                out[i].removeAll { o -> overflow.any { it.key == o.key } }
+            // Push trailing items to the next page until this page fits portrait and landscape.
+            val moved = ArrayList<HomeItem>()
+            while (out[i].size > 1 && !fits(out[i], spec)) moved.add(0, out[i].removeAt(out[i].lastIndex))
+            if (moved.isNotEmpty()) {
                 if (i + 1 >= out.size) out.add(mutableListOf())
-                out[i + 1].addAll(0, overflow)
+                out[i + 1].addAll(0, moved)
             }
             i++
         }
@@ -455,7 +454,7 @@ class LauncherState(private val context: Context, val widgets: WidgetHostManager
     }
 
     private fun createDefault(mode: LayoutMode): ScreenLayout =
-        if (BuildConfig.IS_PAD) createPadDefault() else createPhoneDefault(mode)
+        createPhoneDefault(mode)
 
     /** iPadOS 26-style start: a row of dark glass widgets on top, apps underneath. */
     private fun createPadDefault(): ScreenLayout {

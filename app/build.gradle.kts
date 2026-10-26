@@ -13,7 +13,9 @@ android {
         targetSdk = 34
         // Every GitHub build gets a higher number so new APKs install over the old one.
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
-        versionName = "1.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
+        versionName = "2.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
+        // One app for every screen: phones, the Fold (cover + inner), tablets, portrait or landscape.
+        resValue("string", "app_name", "Halo")
     }
 
     signingConfigs {
@@ -22,32 +24,6 @@ android {
             storePassword = "halo-launcher"
             keyAlias = "halo"
             keyPassword = "halo-launcher"
-        }
-    }
-
-    flavorDimensions += "device"
-    productFlavors {
-        create("fold") {
-            dimension = "device"
-            applicationId = "com.droidkay.halo"
-            resValue("string", "app_name", "Halo")
-            buildConfigField("boolean", "IS_PAD", "false")
-            buildConfigField("boolean", "IS_DUO", "false")
-        }
-        // Halo Duo: separate iOS-style launcher for the Fold that leaves gestures to the system.
-        create("duo") {
-            dimension = "device"
-            applicationId = "com.droidkay.haloduo"
-            resValue("string", "app_name", "Halo Duo")
-            buildConfigField("boolean", "IS_PAD", "false")
-            buildConfigField("boolean", "IS_DUO", "true")
-        }
-        create("pad") {
-            dimension = "device"
-            applicationId = "com.droidkay.halopad"
-            resValue("string", "app_name", "Halo Pad")
-            buildConfigField("boolean", "IS_PAD", "true")
-            buildConfigField("boolean", "IS_DUO", "false")
         }
     }
 

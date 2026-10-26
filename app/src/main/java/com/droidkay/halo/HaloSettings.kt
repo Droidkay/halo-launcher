@@ -12,8 +12,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Shape
 
 /**
- * Halo's Nova-style settings. Every value is Compose state (screens update live) and is saved
- * to SharedPreferences as soon as it changes.
+ * Halo's settings. Every value is Compose state (the home screen updates live) and is saved to
+ * SharedPreferences as soon as it changes.
+ *
+ * Halo has two layouts and picks one from the screen it's on:
+ *  - phone layout ([LayoutMode.COVER]): phones and the Fold's cover screen — iPhone style
+ *  - tablet layout ([LayoutMode.INNER]): tablets and the Fold's inner screen — iPad style
+ * Grid sizes are the portrait numbers; in landscape the grid turns sideways (5×6 becomes 6×5),
+ * so pages keep the same apps when you rotate.
  */
 object HaloSettings {
     private var prefs: SharedPreferences? = null
@@ -24,9 +30,11 @@ object HaloSettings {
         prefs = p
         coverCols = p.getInt("coverCols", 4)
         coverRows = p.getInt("coverRows", 6)
-        innerCols = p.getInt("innerCols", 4)
-        innerRows = p.getInt("innerRows", 6)
-        innerCentered = p.getBoolean("innerCentered", true)
+        innerCols = p.getInt("tabletCols", 5)
+        innerRows = p.getInt("tabletRows", 6)
+        phoneDock = p.getInt("dockCount", 4)
+        tabletDock = p.getInt("tabletDock", 6)
+        dockRecents = p.getBoolean("dockRecents", true)
         iconScale = p.getFloat("iconScale", 1f)
         showLabels = p.getBoolean("showLabels", true)
         labelScale = p.getFloat("labelScale", 1f)
@@ -34,21 +42,13 @@ object HaloSettings {
         iconShape = p.getString("iconShape", "squircle") ?: "squircle"
         iconPack = p.getString("iconPack", "") ?: ""
         dockEnabled = p.getBoolean("dockEnabled", true)
-        dockCount = p.getInt("dockCount", 4)
         dockBackground = p.getBoolean("dockBackground", true)
-        coverSideDock = p.getBoolean("coverSideDock", false)
-        landscapeSideDock = p.getBoolean("landscapeSideDock", true)
-        pageIndicator = p.getString("pageIndicator", "dots") ?: "dots"
-        swipeDown = p.getString("swipeDown", "spotlight") ?: "spotlight"
+        liquidGlass = p.getBoolean("liquidGlass", true)
+        widgetTheme = p.getString("widgetTheme", "auto") ?: "auto"
+        pageIndicator = p.getString("pageIndicator2", "auto") ?: "auto"
+        swipeDown = p.getString("swipeDown2", "notifications") ?: "notifications"
         swipeUp = p.getString("swipeUp", "none") ?: "none"
         doubleTap = p.getString("doubleTap", "none") ?: "none"
-        if (BuildConfig.IS_DUO) {
-            // Halo Duo keeps the phone's own behaviour: swipe down = notification panel
-            // (like Samsung's home screen), nothing else is taken over.
-            swipeDown = "notifications"
-            swipeUp = "none"
-            doubleTap = "none"
-        }
         appLibrary = p.getBoolean("appLibrary", true)
         lockLayout = p.getBoolean("lockLayout", false)
         wallpaperDim = p.getFloat("wallpaperDim", 0f)
@@ -58,30 +58,57 @@ object HaloSettings {
         prefs?.edit()?.apply(block)?.apply()
     }
 
-    // ---- home screen grid
+    // ---- grids (portrait numbers)
     var coverCols by mutableIntStateOf(4)
         private set
     var coverRows by mutableIntStateOf(6)
         private set
-    var innerCols by mutableIntStateOf(4)
+    var innerCols by mutableIntStateOf(5)
         private set
     var innerRows by mutableIntStateOf(6)
         private set
-    /** Inner screen: iPhone-sized grid in the middle (true) or icons spread across the whole screen. */
-    var innerCentered by mutableStateOf(true)
-        private set
+
+    fun cols(mode: LayoutMode) = if (mode == LayoutMode.COVER) coverCols else innerCols
+    fun rows(mode: LayoutMode) = if (mode == LayoutMode.COVER) coverRows else innerRows
 
     fun setGrid(mode: LayoutMode, cols: Int, rows: Int) {
         if (mode == LayoutMode.COVER) {
-            coverCols = cols; coverRows = rows
+            coverCols = cols
+            coverRows = rows
             save { putInt("coverCols", cols); putInt("coverRows", rows) }
         } else {
-            innerCols = cols; innerRows = rows
-            save { putInt("innerCols", cols); putInt("innerRows", rows) }
+            innerCols = cols
+            innerRows = rows
+            save { putInt("tabletCols", cols); putInt("tabletRows", rows) }
         }
     }
 
-    fun updateInnerCentered(v: Boolean) { innerCentered = v; save { putBoolean("innerCentered", v) } }
+    // ---- dock
+    var dockEnabled by mutableStateOf(true)
+        private set
+    var phoneDock by mutableIntStateOf(4)
+        private set
+    var tabletDock by mutableIntStateOf(6)
+        private set
+    /** Tablet layout: the iPad-style recent apps at the end of the dock. */
+    var dockRecents by mutableStateOf(true)
+        private set
+    var dockBackground by mutableStateOf(true)
+        private set
+
+    fun dockSize(mode: LayoutMode) = if (mode == LayoutMode.COVER) phoneDock else tabletDock
+    fun updateDockEnabled(v: Boolean) { dockEnabled = v; save { putBoolean("dockEnabled", v) } }
+    fun updateDockSize(mode: LayoutMode, v: Int) {
+        if (mode == LayoutMode.COVER) {
+            phoneDock = v
+            save { putInt("dockCount", v) }
+        } else {
+            tabletDock = v
+            save { putInt("tabletDock", v) }
+        }
+    }
+    fun updateDockRecents(v: Boolean) { dockRecents = v; save { putBoolean("dockRecents", v) } }
+    fun updateDockBackground(v: Boolean) { dockBackground = v; save { putBoolean("dockBackground", v) } }
 
     // ---- icons
     var iconScale by mutableFloatStateOf(1f)
@@ -106,49 +133,45 @@ object HaloSettings {
     fun updateIconShape(v: String) { iconShape = v; save { putString("iconShape", v) } }
     fun updateIconPack(v: String) { iconPack = v; save { putString("iconPack", v) } }
 
-    // ---- dock
-    var dockEnabled by mutableStateOf(true)
+    // ---- look
+    /** iOS 26 Liquid Glass dock, folders, widgets and buttons (off = classic frosted look). */
+    var liquidGlass by mutableStateOf(true)
         private set
-    var dockCount by mutableIntStateOf(4)
+    /** auto (follow the phone's dark mode), light or dark */
+    var widgetTheme by mutableStateOf("auto")
         private set
-    var dockBackground by mutableStateOf(true)
+    /** auto (phone: Search pill, tablet: dots), dots or search */
+    var pageIndicator by mutableStateOf("auto")
         private set
-    var coverSideDock by mutableStateOf(false)
-        private set
-    var landscapeSideDock by mutableStateOf(true)
+    var wallpaperDim by mutableFloatStateOf(0f)
         private set
 
-    fun updateDockEnabled(v: Boolean) { dockEnabled = v; save { putBoolean("dockEnabled", v) } }
-    fun updateDockCount(v: Int) { dockCount = v; save { putInt("dockCount", v) } }
-    fun updateDockBackground(v: Boolean) { dockBackground = v; save { putBoolean("dockBackground", v) } }
-    fun updateCoverSideDock(v: Boolean) { coverSideDock = v; save { putBoolean("coverSideDock", v) } }
-    fun updateLandscapeSideDock(v: Boolean) { landscapeSideDock = v; save { putBoolean("landscapeSideDock", v) } }
+    fun updateLiquidGlass(v: Boolean) { liquidGlass = v; save { putBoolean("liquidGlass", v) } }
+    fun updateWidgetTheme(v: String) { widgetTheme = v; save { putString("widgetTheme", v) } }
+    fun updatePageIndicator(v: String) { pageIndicator = v; save { putString("pageIndicator2", v) } }
+    fun updateWallpaperDim(v: Float) { wallpaperDim = v; save { putFloat("wallpaperDim", v) } }
 
-    // ---- look & gestures
-    /** dots or search */
-    var pageIndicator by mutableStateOf("dots")
-        private set
+    // ---- gestures (swipe down defaults to the notification panel, like the phone's own home screen)
     /** spotlight, notifications, library, none */
-    var swipeDown by mutableStateOf("spotlight")
+    var swipeDown by mutableStateOf("notifications")
         private set
     var swipeUp by mutableStateOf("none")
         private set
     var doubleTap by mutableStateOf("none")
         private set
+
+    fun updateSwipeDown(v: String) { swipeDown = v; save { putString("swipeDown2", v) } }
+    fun updateSwipeUp(v: String) { swipeUp = v; save { putString("swipeUp", v) } }
+    fun updateDoubleTap(v: String) { doubleTap = v; save { putString("doubleTap", v) } }
+
+    // ---- layout
     var appLibrary by mutableStateOf(true)
         private set
     var lockLayout by mutableStateOf(false)
         private set
-    var wallpaperDim by mutableFloatStateOf(0f)
-        private set
 
-    fun updatePageIndicator(v: String) { pageIndicator = v; save { putString("pageIndicator", v) } }
-    fun updateSwipeDown(v: String) { swipeDown = v; save { putString("swipeDown", v) } }
-    fun updateSwipeUp(v: String) { swipeUp = v; save { putString("swipeUp", v) } }
-    fun updateDoubleTap(v: String) { doubleTap = v; save { putString("doubleTap", v) } }
     fun updateAppLibrary(v: Boolean) { appLibrary = v; save { putBoolean("appLibrary", v) } }
     fun updateLockLayout(v: Boolean) { lockLayout = v; save { putBoolean("lockLayout", v) } }
-    fun updateWallpaperDim(v: Float) { wallpaperDim = v; save { putFloat("wallpaperDim", v) } }
 }
 
 /** The mask Halo cuts app icons and folders to. */

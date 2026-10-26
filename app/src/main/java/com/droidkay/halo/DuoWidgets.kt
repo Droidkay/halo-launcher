@@ -99,8 +99,8 @@ private data class DuoColors(val card: Color, val tile: Color, val glyph: Color,
 
 @Composable
 private fun duoColors(): DuoColors =
-    if (isSystemInDarkTheme()) DuoColors(Color(0xFF1C1C1E), Color(0xFF2C2C2E), Color(0xFFE8EAED), Color.White)
-    else DuoColors(Color(0xFFF7F3F4), Color.White, Color(0xFF3C4043), Color.Black)
+    if (widgetDark()) DuoColors(Color(0xFF1C1C1E), Color.White.copy(alpha = 0.09f), Color(0xFFE8EAED), Color.White)
+    else DuoColors(Color(0xFFF7F3F4), Color.White.copy(alpha = 0.9f), Color(0xFF3C4043), Color.Black)
 
 @Composable
 fun GoogleWidget(size: WidgetSize) {
@@ -108,8 +108,7 @@ fun GoogleWidget(size: WidgetSize) {
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(22.dp))
-            .background(c.card)
+            .widgetSurface(RoundedCornerShape(24.dp))
             .padding(10.dp)
     ) {
         val h = maxHeight
