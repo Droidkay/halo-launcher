@@ -3,11 +3,14 @@
 set -x
 OUT=ui-out
 mkdir -p $OUT
-APK=app/build/outputs/apk/fold/release/app-fold-release.apk
+FLAVOR=${FLAVOR:-fold}
+APK=app/build/outputs/apk/$FLAVOR/release/app-$FLAVOR-release.apk
+PKG=com.droidkay.halo
+[ "$FLAVOR" = "duo" ] && PKG=com.droidkay.haloduo
 adb wait-for-device
 adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 1; done'
 adb install -r -g $APK
-adb shell cmd package set-home-activity com.droidkay.halo/.MainActivity
+adb shell cmd package set-home-activity $PKG/com.droidkay.halo.MainActivity
 adb logcat -c
 
 shot() { adb exec-out screencap -p > "$OUT/$1.png"; }
@@ -46,6 +49,10 @@ adb shell wm density 384
 home; sleep 3; home; sleep 4
 shot 01-inner-home
 dump 01-inner-home
+# Swipe down on the home screen (Halo: Spotlight, Halo Duo: notification panel).
+adb shell input swipe 900 700 900 1500 300; sleep 1.5
+shot 01b-swipe-down
+adb shell input keyevent KEYCODE_BACK; home; sleep 2
 W=1812; H=2176
 
 # Pick an app label on the grid and drag its icon to the right edge (next page / new page).
