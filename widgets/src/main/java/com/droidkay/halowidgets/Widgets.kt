@@ -247,11 +247,7 @@ object Updater {
 class RefreshWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params) {
     override fun doWork(): Result {
         val ctx = applicationContext
-        val needsWeather = Kind.values().any {
-            (it == Kind.WEATHER_S || it == Kind.WEATHER_M) &&
-                AppWidgetManager.getInstance(ctx).getAppWidgetIds(ComponentName(ctx, it.provider)).isNotEmpty()
-        }
-        if (needsWeather && WeatherStore.isStale(ctx)) WeatherStore.refresh(ctx)
+        if (WeatherStore.isStale(ctx)) WeatherStore.refresh(ctx)
         Updater.updateAll(ctx)
         return Result.success()
     }

@@ -14,7 +14,8 @@ dump() { adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sd
 find() { python3 .github/ui/find.py "$OUT/$1.xml" "$2" "${3:-exact}"; }
 
 adb shell am start -n com.droidkay.halowidgets/.MainActivity
-sleep 12
+sleep 15
+adb shell input keyevent KEYCODE_HOME; sleep 1
 adb shell am start -n com.droidkay.halowidgets/.MainActivity
 sleep 3
 shot 01-app-dark
