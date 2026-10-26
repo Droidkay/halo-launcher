@@ -13,8 +13,10 @@ shot() { adb exec-out screencap -p > "$OUT/$1.png"; }
 dump() { adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "$OUT/$1.xml" >/dev/null 2>&1; }
 find() { python3 .github/ui/find.py "$OUT/$1.xml" "$2" "${3:-exact}"; }
 
+# let the network come up before the first weather fetch
+for i in $(seq 1 30); do adb shell ping -c1 -W2 api.open-meteo.com >/dev/null 2>&1 && break; sleep 2; done
 adb shell am start -n com.droidkay.halowidgets/.MainActivity
-sleep 15
+sleep 20
 adb shell input keyevent KEYCODE_HOME; sleep 1
 adb shell am start -n com.droidkay.halowidgets/.MainActivity
 sleep 3
@@ -65,5 +67,5 @@ adb shell input swipe 1500 1300 200 1300 300; sleep 2
 shot 31-home-page2
 adb shell settings put system user_rotation 1
 sleep 5; shot 32-home-landscape
-adb logcat -d | grep -iE "halowidgets|FATAL|AndroidRuntime|RemoteViews" | tail -200 > $OUT/99-log.txt
+adb logcat -d | grep -iE "HaloWidgets|WM-WorkerWrapper|FATAL|AndroidRuntime" | grep -v AccessibilityNodeInfoDumper | tail -200 > $OUT/99-log.txt
 exit 0

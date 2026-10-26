@@ -240,16 +240,24 @@ object Updater {
             ExistingPeriodicWorkPolicy.KEEP,
             PeriodicWorkRequestBuilder<RefreshWorker>(15, TimeUnit.MINUTES).build(),
         )
-        wm.enqueueUniqueWork("halo-widgets-now", ExistingWorkPolicy.REPLACE, OneTimeWorkRequestBuilder<RefreshWorker>().build())
+        wm.enqueueUniqueWork(
+            "halo-widgets-now",
+            ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<RefreshWorker>()
+                .setBackoffCriteria(androidx.work.BackoffPolicy.LINEAR, 20, TimeUnit.SECONDS)
+                .build(),
+        )
     }
 }
 
 class RefreshWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params) {
     override fun doWork(): Result {
         val ctx = applicationContext
-        if (WeatherStore.isStale(ctx)) WeatherStore.refresh(ctx)
+        var weatherFailed = false
+        if (WeatherStore.isStale(ctx)) weatherFailed = WeatherStore.refresh(ctx) == null
         Updater.updateAll(ctx)
-        return Result.success()
+        // No weather yet (offline, network still starting…): try again shortly instead of in 15 minutes.
+        return if (weatherFailed && WeatherStore.cached(ctx) == null && runAttemptCount < 6) Result.retry() else Result.success()
     }
 }
 

@@ -165,7 +165,7 @@ object WeatherStore {
         } finally {
             c.disconnect()
         }
-    }.getOrNull()
+    }.onFailure { android.util.Log.w("HaloWidgets", "weather fetch failed: $url", it) }.getOrNull()
 
     @Suppress("DEPRECATION")
     private fun cityName(ctx: Context, lat: Double, lon: Double): String {
