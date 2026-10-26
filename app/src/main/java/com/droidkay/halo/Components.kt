@@ -247,7 +247,22 @@ fun openWallpaperPicker(context: Context) {
     context.safeStart(Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), "Choose wallpaper"))
 }
 
+/**
+ * Makes Halo the home app with Android's own "Set as default" dialog (RoleManager), so phones whose
+ * settings screens get in the way (e.g. Xiaomi HyperOS) aren't involved. Falls back to Home settings.
+ */
 fun openHomeSettings(context: Context) {
+    val activity = context as? android.app.Activity
+    val roles = context.getSystemService(android.app.role.RoleManager::class.java)
+    if (activity != null && roles != null &&
+        roles.isRoleAvailable(android.app.role.RoleManager.ROLE_HOME) &&
+        !roles.isRoleHeld(android.app.role.RoleManager.ROLE_HOME)
+    ) {
+        val ok = runCatching {
+            activity.startActivityForResult(roles.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME), 4242)
+        }.isSuccess
+        if (ok) return
+    }
     context.safeStart(Intent(Settings.ACTION_HOME_SETTINGS))
 }
 
