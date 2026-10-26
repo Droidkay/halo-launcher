@@ -1,10 +1,12 @@
-# Halo — iOS-style launcher for Galaxy Z Fold 5
+# Halo — iOS-style launcher for every Android screen
 
-Big widgets, no app drawer, App Library on the last page.
+One app for phones, the Galaxy Z Fold (cover + inner screen) and tablets, in portrait or landscape.
 
-- **Cover screen** → iPhone layout (4 × 6 grid, 4-app dock)
-- **Inner screen** → iPad layout (6 × 6 grid, 6-app dock + 3 recent apps)
-- Each screen keeps its own layout. Folding/unfolding plays the Apple "Duo" morph: the layout you leave stretches toward the new screen shape while melting into frosted glass, the new layout resolves out of the frost, and the half that is still swinging stays frosted until the hinge lands (needs Android 12+; hinge sensor).
+- **Phone layout** (phones, Fold cover screen): iPhone style, 4 × 6 grid, Search pill, dock along the bottom (right edge when held sideways)
+- **Tablet layout** (tablets, Fold inner screen): iPad style, 5 × 6 grid, dots, dock with recent apps
+- In landscape the grid turns sideways (5 × 6 → 6 × 5) so every page keeps the same apps
+- Folding/unfolding switches layouts with the Apple "Duo" style frost morph
+- Swipe gestures stay the system's; swipe down on the home screen opens notifications (changeable)
 
 ## Features
 - Home pages with iOS-sized widgets: Clock (analog / digital), Calendar (S/M/L), Batteries
