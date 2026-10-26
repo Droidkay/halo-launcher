@@ -220,7 +220,7 @@ fun SettingsScreen(state: LauncherState, current: LayoutMode, onDismiss: () -> U
 
                 // ------------------------------------------------ gestures
                 val actions = listOf("spotlight" to "Search", "notifications" to "Notifications", "library" to "App Library", "none" to "Nothing")
-                Section("GESTURES") {
+                if (!BuildConfig.IS_DUO) Section("GESTURES") {
                     Choice("Swipe down", actions, HaloSettings.swipeDown) { HaloSettings.updateSwipeDown(it) }
                     Line()
                     Choice("Swipe up", actions, HaloSettings.swipeUp) { HaloSettings.updateSwipeUp(it) }

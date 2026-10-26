@@ -32,12 +32,22 @@ android {
             applicationId = "com.droidkay.halo"
             resValue("string", "app_name", "Halo")
             buildConfigField("boolean", "IS_PAD", "false")
+            buildConfigField("boolean", "IS_DUO", "false")
+        }
+        // Halo Duo: separate iOS-style launcher for the Fold that leaves gestures to the system.
+        create("duo") {
+            dimension = "device"
+            applicationId = "com.droidkay.haloduo"
+            resValue("string", "app_name", "Halo Duo")
+            buildConfigField("boolean", "IS_PAD", "false")
+            buildConfigField("boolean", "IS_DUO", "true")
         }
         create("pad") {
             dimension = "device"
             applicationId = "com.droidkay.halopad"
             resValue("string", "app_name", "Halo Pad")
             buildConfigField("boolean", "IS_PAD", "true")
+            buildConfigField("boolean", "IS_DUO", "false")
         }
     }
 

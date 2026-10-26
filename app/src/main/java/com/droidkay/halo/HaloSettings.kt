@@ -42,6 +42,13 @@ object HaloSettings {
         swipeDown = p.getString("swipeDown", "spotlight") ?: "spotlight"
         swipeUp = p.getString("swipeUp", "none") ?: "none"
         doubleTap = p.getString("doubleTap", "none") ?: "none"
+        if (BuildConfig.IS_DUO) {
+            // Halo Duo keeps the phone's own behaviour: swipe down = notification panel
+            // (like Samsung's home screen), nothing else is taken over.
+            swipeDown = "notifications"
+            swipeUp = "none"
+            doubleTap = "none"
+        }
         appLibrary = p.getBoolean("appLibrary", true)
         lockLayout = p.getBoolean("lockLayout", false)
         wallpaperDim = p.getFloat("wallpaperDim", 0f)
