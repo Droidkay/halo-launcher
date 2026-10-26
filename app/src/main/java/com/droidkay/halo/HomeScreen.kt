@@ -184,6 +184,13 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
         state.editMode = true
     }
     val edgeStripPx = with(LocalDensity.current) { 22.dp.toPx() }
+    fun targetPage(page: Int) {
+        val item = drag.item ?: return
+        val base = state.layout(mode).pages.getOrNull(page) ?: emptyList()
+        drag.pagePreview = if (base.any { it.key == item.key }) base else base + item
+        drag.target = DragSpot.Page(page)
+        drag.lastSwap = null
+    }
     drag.onHover = hover@{
         val item = drag.item ?: return@hover
         val key = item.key
@@ -236,6 +243,8 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
     }
     drag.onDrop = drop@{
         val item = drag.item ?: return@drop
+        // Let go somewhere that isn't a cell (beside the grid, over the dots…): drop it on the page in view.
+        if (drag.target == null && pager.currentPage < pageCount) targetPage(pager.currentPage)
         val key = item.key
         val l = state.layout(mode)
         val pages = l.pages.map { pg -> pg.filter { it.key != key } }.toMutableList()
@@ -295,7 +304,9 @@ private fun HomeRoot(state: LauncherState, mode: LayoutMode) {
                 delay(50)
             }
             pager.animateScrollToPage(next)
-            drag.target = null
+            // The page we just flipped to is the drop target straight away, so letting go right
+            // after the flip (finger still beside the grid) puts the app on this page.
+            targetPage(next)
             drag.onHover()
         }
     }
