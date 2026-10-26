@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <queries>
+        <package android:name="com.google.android.googlequicksearchbox" />
+        <package android:name="com.miui.weather2" />
+        <package android:name="com.sec.android.daemonapp" />
+        <intent><action android:name="android.intent.action.SHOW_ALARMS" /></intent>
+        <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="content" android:host="com.android.calendar" /></intent>
+    </queries>
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.HaloWidgets">
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <receiver android:name=".W_clock_s" android:label="@string/label_clock_s" android:exported="false">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/info_clock_s" />
+        </receiver>
+        <receiver android:name=".W_clock_m" android:label="@string/label_clock_m" android:exported="false">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/info_clock_m" />
+        </receiver>
+        <receiver android:name=".W_analog_s" android:label="@string/label_analog_s" android:exported="false">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/info_analog_s" />
+        </receiver>
+        <receiver android:name=".W_calendar_s" android:label="@string/label_calendar_s" android:exported="false">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/info_calendar_s" />
+        </receiver>
+        <receiver android:name=".W_calendar_m" android:label="@string/label_calendar_m" android:exported="false">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/info_calendar_m" />
+        </receiver>
+        <receiver android:name=".W_calendar_l" android:label="@string/label_calendar_l" android:exported="false">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/info_calendar_l" />
+        </receiver>
+        <receiver android:name=".W_weather_s" android:label="@string/label_weather_s" android:exported="false">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/info_weather_s" />
+        </receiver>
+        <receiver android:name=".W_weather_m" android:label="@string/label_weather_m" android:exported="false">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/info_weather_m" />
+        </receiver>
+        <receiver android:name=".W_battery_s" android:label="@string/label_battery_s" android:exported="false">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/info_battery_s" />
+        </receiver>
+        <receiver android:name=".W_battery_m" android:label="@string/label_battery_m" android:exported="false">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/info_battery_m" />
+        </receiver>
+        <receiver android:name=".W_search_s" android:label="@string/label_search_s" android:exported="false">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/info_search_s" />
+        </receiver>
+        <receiver android:name=".W_search_m" android:label="@string/label_search_m" android:exported="false">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/info_search_m" />
+        </receiver>
+    </application>
+</manifest>

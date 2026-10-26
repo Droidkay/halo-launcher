@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:padding="10dp" android:background="@drawable/bg_dark">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal">
+        <FrameLayout android:id="@+id/t_search" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:background="@drawable/tile_dark">
+            <ImageView android:id="@+id/i_g" android:layout_width="36dp" android:layout_height="36dp" android:layout_gravity="center" />
+        </FrameLayout>
+        <FrameLayout android:layout_width="8dp" android:layout_height="match_parent" />
+        <FrameLayout android:id="@+id/t_ai" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:background="@drawable/tile_dark">
+            <ImageView android:id="@+id/i_ai" android:layout_width="36dp" android:layout_height="36dp" android:layout_gravity="center" />
+        </FrameLayout>
+    </LinearLayout>
+    <FrameLayout android:layout_width="match_parent" android:layout_height="8dp" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal">
+        <FrameLayout android:id="@+id/t_voice" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:background="@drawable/tile_dark">
+            <ImageView android:id="@+id/i_mic" android:layout_width="36dp" android:layout_height="36dp" android:layout_gravity="center" />
+        </FrameLayout>
+        <FrameLayout android:layout_width="8dp" android:layout_height="match_parent" />
+        <FrameLayout android:id="@+id/t_lens" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:background="@drawable/tile_dark">
+            <ImageView android:id="@+id/i_lens" android:layout_width="36dp" android:layout_height="36dp" android:layout_gravity="center" />
+        </FrameLayout>
+    </LinearLayout>
+</LinearLayout>

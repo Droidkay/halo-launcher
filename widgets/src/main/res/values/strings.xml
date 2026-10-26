@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Halo Widgets</string>
+    <string name="desc_clock_s">Time and date.</string>
+    <string name="label_clock_s">Clock</string>
+    <string name="desc_clock_m">Time, date and an analog clock.</string>
+    <string name="label_clock_m">Clock</string>
+    <string name="desc_analog_s">Analog clock.</string>
+    <string name="label_analog_s">Analog Clock</string>
+    <string name="desc_calendar_s">Today.</string>
+    <string name="label_calendar_s">Calendar</string>
+    <string name="desc_calendar_m">Today and this month.</string>
+    <string name="label_calendar_m">Calendar</string>
+    <string name="desc_calendar_l">This month.</string>
+    <string name="label_calendar_l">Calendar</string>
+    <string name="desc_weather_s">Current weather.</string>
+    <string name="label_weather_s">Weather</string>
+    <string name="desc_weather_m">Current weather and the next hours.</string>
+    <string name="label_weather_m">Weather</string>
+    <string name="desc_battery_s">Battery level.</string>
+    <string name="label_battery_s">Batteries</string>
+    <string name="desc_battery_m">Battery level and charging.</string>
+    <string name="label_battery_m">Batteries</string>
+    <string name="desc_search_s">Search, AI Mode, voice and Lens.</string>
+    <string name="label_search_s">Google</string>
+    <string name="desc_search_m">Search bar with voice, Lens and AI Mode.</string>
+    <string name="label_search_m">Google</string>
+</resources>

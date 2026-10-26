@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 rootProject.name = "HaloLauncher"
 include(":app")
 include(":kitafold")
+include(":widgets")

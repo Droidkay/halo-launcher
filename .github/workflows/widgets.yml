@@ -1,0 +1,41 @@
+name: Build Halo Widgets APK
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'widgets/**'
+      - '.github/workflows/widgets.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Build
+        run: |
+          set -o pipefail
+          gradle :widgets:assembleRelease --stacktrace 2>&1 | tee build.log
+      - name: Report compile errors
+        if: failure()
+        run: |
+          grep -E "^e: |What went wrong|error:" -A1 build.log | head -60 | while IFS= read -r l; do echo "::error::$l"; done
+      - name: Name APK
+        run: cp widgets/build/outputs/apk/release/widgets-release.apk Halo-Widgets-${{ github.run_number }}.apk
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: widgets-${{ github.run_number }}
+          name: Halo Widgets ${{ github.run_number }}
+          files: Halo-Widgets-*.apk
+          make_latest: false
