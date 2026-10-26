@@ -48,8 +48,16 @@ fun AppLibraryPage(
     onMenu: (MenuRequest) -> Unit,
 ) {
     val groups = remember(state.apps, state.recents) { state.libraryGroups() }
-    val cols = if (mode == LayoutMode.INNER) 4 else 2
-    Column(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+    // iPad-sized folder tiles (≈140dp) on tablets — more columns on wider screens instead of
+    // bigger tiles — and the iPhone's two big columns on phones. The grid is centred.
+    val gap = 18.dp
+    val tile = if (mode == LayoutMode.INNER) 140.dp else 150.dp
+    val cols = if (mode == LayoutMode.INNER) {
+        ((maxWidth - 40.dp + gap) / (tile + gap)).toInt().coerceIn(3, 6)
+    } else 2
+    val gridW = if (mode == LayoutMode.INNER) min(maxWidth, tile * cols + gap * (cols - 1) + 40.dp) else maxWidth
+    Column(Modifier.width(gridW).fillMaxHeight()) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -71,13 +79,14 @@ fun AppLibraryPage(
             columns = GridCells.Fixed(cols),
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 28.dp),
-            horizontalArrangement = Arrangement.spacedBy(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(gap),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             items(groups, key = { it.first }) { group ->
                 CategoryTile(state, group.first, group.second, launch, onFolder, onMenu)
             }
         }
+    }
     }
 }
 

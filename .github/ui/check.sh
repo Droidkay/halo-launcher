@@ -125,6 +125,12 @@ shot 10-tablet-portrait
 adb shell settings put system user_rotation 1
 sleep 5
 shot 11-tablet-landscape
+# App Library page (swipe left a few times)
+for i in 1 2 3 4; do adb shell input swipe 1900 900 300 900 250; sleep 0.8; done
+sleep 1; shot 11b-tablet-library
+adb shell settings put system user_rotation 0
+sleep 4; shot 11c-tablet-library-portrait
+home; sleep 1
 adb shell settings put system user_rotation 0
 sleep 2
 
